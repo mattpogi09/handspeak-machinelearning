@@ -1,0 +1,23 @@
+# Node
+node_modules/
+dist/
+.vite/
+
+# Python venv / backend libs
+backend/Lib/
+backend/Scripts/
+backend/__pycache__/
+backend/data/__pycache__/
+backend/models/__pycache__/
+backend/routes/__pycache__/
+__pycache__/
+*.pyc
+*.pyo
+
+# Env
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,180 @@
+@import "tailwindcss";
+
+/* ── CSS Reset & Variables ─────────────────────────────────────── */
+:root {
+  /* Ocean palette */
+  --ocean-deep: #0a1628;
+  --ocean-dark: #0d2137;
+  --ocean-mid: #1565c0;
+  --ocean-light: #42a5f5;
+  --ocean-sky: #87ceeb;
+  --ocean-foam: #e0f7fa;
+  --ocean-surface: #b3e5fc;
+
+  /* Sand palette */
+  --sand-light: #fff8e1;
+  --sand-mid: #ffe0b2;
+  --sand-dark: #f4a23c;
+
+  /* Accent */
+  --coral: #ff6b6b;
+  --coral-light: #ff8a80;
+  --teal: #00bfa5;
+  --gold: #ffd700;
+
+  /* Brand */
+  --brand-blue: #1a73e8;
+  --brand-blue-dark: #1557b0;
+  --brand-gradient: linear-gradient(135deg, #42a5f5 0%, #00bfa5 100%);
+
+  /* Text */
+  --text-primary: #1a2a3a;
+  --text-secondary: #546e7a;
+  --text-light: #ffffff;
+
+  /* UI */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 24px;
+  --radius-xl: 32px;
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.18);
+
+  --font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  font-family: var(--font-family);
+  color: var(--text-primary);
+  background: var(--ocean-foam);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  font-family: var(--font-family);
+  border: none;
+  outline: none;
+}
+
+input {
+  font-family: var(--font-family);
+}
+
+/* Utility */
+.page-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--ocean-foam);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--ocean-light);
+  border-radius: 4px;
+}
+
+/* ── Button Animations ─────────────────────────────────────── */
+@keyframes btn-glow {
+  0%, 100% { box-shadow: 0 0 12px rgba(26, 115, 232, 0.3); }
+  50% { box-shadow: 0 0 28px rgba(26, 115, 232, 0.55); }
+}
+
+@keyframes btn-pulse-ring {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+@keyframes float-in {
+  0% { opacity: 0; transform: translateY(20px) scale(0.95); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes modal-enter {
+  0% { opacity: 0; transform: scale(0.92) translateY(16px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.btn-ocean {
+  position: relative;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+  overflow: visible;
+}
+.btn-ocean:hover {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.18);
+  filter: brightness(1.08);
+}
+.btn-ocean:active {
+  transform: translateY(0) scale(0.97);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+
+.btn-ocean-glow {
+  animation: btn-glow 2.5s ease-in-out infinite;
+}
+
+.animate-float-in {
+  animation: float-in 0.5s ease-out both;
+}
+
+.animate-modal-enter {
+  animation: modal-enter 0.3s ease-out both;
+}
+
+/* ── Fish Swimming Animations ──────────────────────────────── */
+/* FishSvg head faces LEFT naturally, so swim-right needs scaleX(-1) flip */
+@keyframes swim-right {
+  0%   { transform: translateX(-120px) scaleX(-1); opacity: 0; }
+  5%   { opacity: 1; }
+  92%  { opacity: 1; }
+  100% { transform: translateX(calc(100vw + 120px)) scaleX(-1); opacity: 0; }
+}
+
+@keyframes swim-left {
+  0%   { transform: translateX(120px); opacity: 0; }
+  5%   { opacity: 1; }
+  92%  { opacity: 1; }
+  100% { transform: translateX(calc(-100vw - 120px)); opacity: 0; }
+}
+
+@keyframes bubble-rise {
+  0%   { transform: translateY(0) scale(1); opacity: 0.6; }
+  50%  { opacity: 0.4; }
+  100% { transform: translateY(-120px) scale(1.3); opacity: 0; }
+}
+
+@keyframes wave-drift {
+  0%, 100% { transform: translateX(0); }
+  50%       { transform: translateX(30px); }
+}
+
+.fish-swim-r { animation: swim-right linear infinite; }
+.fish-swim-l { animation: swim-left  linear infinite; }
+.bubble-rise { animation: bubble-rise ease-in infinite; }
