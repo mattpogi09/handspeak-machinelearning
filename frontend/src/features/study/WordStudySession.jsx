@@ -85,7 +85,7 @@ export default function WordStudySession() {
       setStatus(`Checking ${currentWord.label}...`);
 
       try {
-        const response = await postJson('/api/gesture/verify', {
+        const response = await postJson('/api/gesture/verify/dynamic', {
           target_word: currentWord.word,
           frames: frameBufferRef.current,
           top_k: 5,

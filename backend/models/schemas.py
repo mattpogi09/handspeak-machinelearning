@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from pydantic import Field
-from typing import Optional, List
+from typing import Optional, List, Literal
 
 
 # ── Auth ────────────────────────────────────────────────────────────
@@ -60,6 +60,7 @@ class GestureVerificationRequest(BaseModel):
     target_word: str
     frames: List[str] = Field(default_factory=list)
     image: Optional[str] = None
+    model_type: Literal["auto", "static", "dynamic"] = "auto"
     top_k: int = 5
     threshold: float = 0.72
 
@@ -74,6 +75,16 @@ class GestureVerificationResponse(BaseModel):
     best_match: str
     similarity: float
     target_similarity: float
+    threshold: float
+    is_match: bool
+    top_matches: List[GestureMatch] = Field(default_factory=list)
+    message: Optional[str] = None
+
+
+class AlphabetVerificationResponse(BaseModel):
+    target_letter: str
+    predicted_letter: str
+    confidence: float
     threshold: float
     is_match: bool
     top_matches: List[GestureMatch] = Field(default_factory=list)

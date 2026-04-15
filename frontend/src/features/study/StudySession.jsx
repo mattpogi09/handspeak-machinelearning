@@ -15,10 +15,15 @@ import {
   buildBossChallenge,
 } from './studyVoyage';
 
-const CAPTURE_INTERVAL_MS = 450;
-const REQUIRED_STREAK = 2;
-const MIN_FRAMES_FOR_VERIFY = 3;
-const DEFAULT_THRESHOLD = 0.66;
+const LETTER_CAPTURE_INTERVAL_MS = 450;
+const WORD_CAPTURE_INTERVAL_MS = 250;
+const REQUIRED_STREAK = 3;
+const LETTER_MIN_FRAMES_FOR_VERIFY = 3;
+const WORD_MIN_FRAMES_FOR_VERIFY = 8;
+const LETTER_FRAME_BUFFER_SIZE = 5;
+const WORD_FRAME_BUFFER_SIZE = 20;
+const LETTER_THRESHOLD = 0.66;
+const WORD_THRESHOLD = 0.48;
 
 export default function StudySession() {
   const { islandId, levelId } = useParams();
@@ -95,11 +100,18 @@ export default function StudySession() {
     : null;
 
   const targetWord = phraseLevel?.label ? String(phraseLevel.label).replace(/\s+/g, '').toUpperCase() : '';
+  const isLetterTarget = targetWord.length === 1;
+  const verifyModelType = isLetterTarget ? 'static' : 'dynamic';
+  const verifyEndpoint = isLetterTarget ? '/api/gesture/verify/static' : '/api/gesture/verify/dynamic';
+  const verifyThreshold = isLetterTarget ? LETTER_THRESHOLD : WORD_THRESHOLD;
+  const minFramesForVerify = isLetterTarget ? LETTER_MIN_FRAMES_FOR_VERIFY : WORD_MIN_FRAMES_FOR_VERIFY;
+  const frameBufferSize = isLetterTarget ? LETTER_FRAME_BUFFER_SIZE : WORD_FRAME_BUFFER_SIZE;
+  const captureIntervalMs = isLetterTarget ? LETTER_CAPTURE_INTERVAL_MS : WORD_CAPTURE_INTERVAL_MS;
 
   const verifyCurrentFrames = useCallback(async (triggeredByStop = false) => {
-    if (isSubmittingRef.current || !targetWord || isBossLevel || alreadyCompleted || !levelUnlocked) return;
-    if (frameBufferRef.current.length < MIN_FRAMES_FOR_VERIFY) {
-      setStatus(`Need ${MIN_FRAMES_FOR_VERIFY - frameBufferRef.current.length} more frame(s) before checking`);
+    if (isSubmittingRef.current || !targetWord || isBossLevel || !levelUnlocked) return;
+    if (frameBufferRef.current.length < minFramesForVerify) {
+      setStatus(`Need ${minFramesForVerify - frameBufferRef.current.length} more frame(s) before checking`);
       return;
     }
 
@@ -107,11 +119,11 @@ export default function StudySession() {
     setStatus(`Checking ${panelTitle}...`);
 
     try {
-      const response = await postJson('/api/gesture/verify', {
+      const response = await postJson(verifyEndpoint, {
         target_word: targetWord,
         frames: frameBufferRef.current,
         top_k: 5,
-        threshold: DEFAULT_THRESHOLD,
+        threshold: verifyThreshold,
       });
 
       setLatestResult(response);
@@ -147,9 +159,19 @@ export default function StudySession() {
     } finally {
       isSubmittingRef.current = false;
     }
-  }, [targetWord, isBossLevel, alreadyCompleted, levelUnlocked, panelTitle]);
+  }, [targetWord, isBossLevel, levelUnlocked, panelTitle, verifyThreshold, minFramesForVerify, verifyEndpoint, verifyModelType]);
 
   const handleRecordToggle = useCallback(async () => {
+    if (!levelUnlocked) {
+      setStatus('This level is locked. Complete previous levels first.');
+      return;
+    }
+
+    if (isBossLevel) {
+      setStatus('Boss levels use the complete button after practicing combinations.');
+      return;
+    }
+
     if (!recording) {
       setStatus('Recording... hold the sign steady');
       setRecording(true);
@@ -157,17 +179,16 @@ export default function StudySession() {
     }
 
     setRecording(false);
-    if (isBossLevel) return;
 
     const stopFrame = takeFrame();
     if (stopFrame) {
-      frameBufferRef.current = [...frameBufferRef.current, stopFrame].slice(-5);
+      frameBufferRef.current = [...frameBufferRef.current, stopFrame].slice(-frameBufferSize);
       setCapturedFrames(frameBufferRef.current.length);
     }
 
-    if (frameBufferRef.current.length > 0 && frameBufferRef.current.length < MIN_FRAMES_FOR_VERIFY) {
+    if (frameBufferRef.current.length > 0 && frameBufferRef.current.length < minFramesForVerify) {
       const padFrame = frameBufferRef.current[frameBufferRef.current.length - 1];
-      while (frameBufferRef.current.length < MIN_FRAMES_FOR_VERIFY) {
+      while (frameBufferRef.current.length < minFramesForVerify) {
         frameBufferRef.current.push(padFrame);
       }
       setCapturedFrames(frameBufferRef.current.length);
@@ -179,7 +200,7 @@ export default function StudySession() {
     }
 
     await verifyCurrentFrames(true);
-  }, [recording, isBossLevel, verifyCurrentFrames, takeFrame]);
+  }, [recording, isBossLevel, verifyCurrentFrames, takeFrame, frameBufferSize, minFramesForVerify, levelUnlocked]);
 
   useEffect(() => {
     frameBufferRef.current = [];
@@ -191,7 +212,7 @@ export default function StudySession() {
   }, [levelId]);
 
   useEffect(() => {
-    if (!recording || !levelUnlocked || alreadyCompleted || isBossLevel || !targetWord) return undefined;
+    if (!recording || !levelUnlocked || isBossLevel || !targetWord) return undefined;
 
     const intervalId = window.setInterval(async () => {
       if (isSubmittingRef.current || !webcamRef.current) return;
@@ -199,19 +220,19 @@ export default function StudySession() {
       const screenshot = takeFrame();
       if (!screenshot) return;
 
-      frameBufferRef.current = [...frameBufferRef.current, screenshot].slice(-5);
+      frameBufferRef.current = [...frameBufferRef.current, screenshot].slice(-frameBufferSize);
       setCapturedFrames(frameBufferRef.current.length);
 
-      if (frameBufferRef.current.length < MIN_FRAMES_FOR_VERIFY) {
-        setStatus(`Collecting frames ${frameBufferRef.current.length}/${MIN_FRAMES_FOR_VERIFY}...`);
+      if (frameBufferRef.current.length < minFramesForVerify) {
+        setStatus(`Collecting frames ${frameBufferRef.current.length}/${minFramesForVerify}...`);
         return;
       }
 
       await verifyCurrentFrames(false);
-    }, CAPTURE_INTERVAL_MS);
+    }, captureIntervalMs);
 
     return () => window.clearInterval(intervalId);
-  }, [recording, levelUnlocked, alreadyCompleted, isBossLevel, verifyCurrentFrames, takeFrame]);
+  }, [recording, levelUnlocked, isBossLevel, verifyCurrentFrames, takeFrame, frameBufferSize, minFramesForVerify, captureIntervalMs]);
 
   useEffect(() => {
     if (!recording && !showSuccess && !alreadyCompleted && !isBossLevel && status === 'Ready to verify') {
@@ -343,7 +364,7 @@ export default function StudySession() {
               background: 'rgba(2,10,28,0.75)', border: '1px solid rgba(255,255,255,0.18)',
               borderRadius: 10, padding: '6px 10px', color: 'white', fontSize: 12, fontWeight: 800,
             }}>
-              Frames: {capturedFrames}/{MIN_FRAMES_FOR_VERIFY}
+              Frames: {capturedFrames}/{minFramesForVerify}
             </div>
           )}
         </div>
@@ -483,6 +504,9 @@ export default function StudySession() {
                 {latestResult
                   ? `Best: ${latestResult.best_match} · Similarity: ${latestResult.similarity.toFixed(3)}`
                   : 'Press record and hold the target sign in frame.'}
+              </p>
+              <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.56)' }}>
+                Model: {verifyModelType === 'static' ? 'Static (letter)' : 'Dynamic (word)'}
               </p>
               {matchStreak > 0 && (
                 <p style={{ margin: 0, fontSize: 12, color: '#86efac', fontWeight: 800 }}>

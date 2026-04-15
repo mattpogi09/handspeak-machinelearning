@@ -5,10 +5,11 @@ import Camera from '../../components/Camera';
 import { fetchJson, postJson } from '../../lib/api';
 import { findWordIndex, getNextWord, getPreviousWord, normalizeWordEntry } from '../../lib/vocabulary';
 
-const CAPTURE_INTERVAL_MS = 450;
+const CAPTURE_INTERVAL_MS = 250;
 const REQUIRED_STREAK = 2;
-const MIN_FRAMES_FOR_VERIFY = 3;
-const DEFAULT_THRESHOLD = 0.66;
+const MIN_FRAMES_FOR_VERIFY = 8;
+const FRAME_BUFFER_SIZE = 20;
+const DEFAULT_THRESHOLD = 0.48;
 
 export default function WordPracticeSession() {
   const { wordId } = useParams();
@@ -27,6 +28,33 @@ export default function WordPracticeSession() {
     if (!webcamRef.current) return null;
     return webcamRef.current.captureFrame?.() || webcamRef.current.getScreenshot?.() || null;
   }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    fetchJson('/api/gesture/words')
+      .then((data) => {
+        if (!active) return;
+        setWords(data.map((entry, index) => normalizeWordEntry(entry, index)));
+      })
+      .catch((fetchError) => {
+        if (active) setStatus(fetchError.message || 'Unable to load vocabulary');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!words.length) return;
+    const index = findWordIndex(words, wordId);
+    setCurrentWord(index >= 0 ? words[index] : words[0]);
+  }, [words, wordId]);
+
+  const currentIndex = useMemo(() => findWordIndex(words, currentWord?.id || wordId), [words, currentWord, wordId]);
+  const nextWord = useMemo(() => getNextWord(words, currentWord?.id || wordId), [words, currentWord, wordId]);
+  const previousWord = useMemo(() => getPreviousWord(words, currentWord?.id || wordId), [words, currentWord, wordId]);
 
   const advanceToNextWord = useCallback(() => {
     setTimeout(() => {
@@ -49,7 +77,7 @@ export default function WordPracticeSession() {
     setStatus(`Checking ${currentWord.label}...`);
 
     try {
-      const response = await postJson('/api/gesture/verify', {
+      const response = await postJson('/api/gesture/verify/dynamic', {
         target_word: currentWord.word,
         frames: frameBufferRef.current,
         top_k: 5,
@@ -100,7 +128,7 @@ export default function WordPracticeSession() {
 
     const stopFrame = takeFrame();
     if (stopFrame) {
-      frameBufferRef.current = [...frameBufferRef.current, stopFrame].slice(-5);
+      frameBufferRef.current = [...frameBufferRef.current, stopFrame].slice(-FRAME_BUFFER_SIZE);
     }
 
     if (frameBufferRef.current.length > 0 && frameBufferRef.current.length < MIN_FRAMES_FOR_VERIFY) {
@@ -117,33 +145,6 @@ export default function WordPracticeSession() {
 
     await verifyCurrentFrames(true);
   }, [recording, verifyCurrentFrames, takeFrame]);
-
-  useEffect(() => {
-    let active = true;
-
-    fetchJson('/api/gesture/words')
-      .then((data) => {
-        if (!active) return;
-        setWords(data.map((entry, index) => normalizeWordEntry(entry, index)));
-      })
-      .catch((fetchError) => {
-        if (active) setStatus(fetchError.message || 'Unable to load vocabulary');
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!words.length) return;
-    const index = findWordIndex(words, wordId);
-    setCurrentWord(index >= 0 ? words[index] : words[0]);
-  }, [words, wordId]);
-
-  const currentIndex = useMemo(() => findWordIndex(words, currentWord?.id || wordId), [words, currentWord, wordId]);
-  const nextWord = useMemo(() => getNextWord(words, currentWord?.id || wordId), [words, currentWord, wordId]);
-  const previousWord = useMemo(() => getPreviousWord(words, currentWord?.id || wordId), [words, currentWord, wordId]);
 
   const goTo = useCallback((idx) => {
     if (!words.length) return;
@@ -164,7 +165,7 @@ export default function WordPracticeSession() {
       const screenshot = takeFrame();
       if (!screenshot) return;
 
-      frameBufferRef.current = [...frameBufferRef.current, screenshot].slice(-5);
+      frameBufferRef.current = [...frameBufferRef.current, screenshot].slice(-FRAME_BUFFER_SIZE);
       if (frameBufferRef.current.length < MIN_FRAMES_FOR_VERIFY) {
         setStatus(`Collecting frames ${frameBufferRef.current.length}/${MIN_FRAMES_FOR_VERIFY}...`);
         return;

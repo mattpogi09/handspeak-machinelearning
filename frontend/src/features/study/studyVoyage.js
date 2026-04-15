@@ -1,4 +1,4 @@
-import { STUDY_TOPICS } from '../../data/aslData';
+import { STUDY_TOPICS, ALPHABET_TOPICS } from '../../data/aslData';
 
 export const STUDY_PROGRESS_STORAGE_KEY = 'handspeak_study_progress';
 
@@ -84,49 +84,100 @@ const ISLAND_INTRO = {
   },
 };
 
-
-export const STUDY_ISLANDS = STUDY_TOPICS.map((topic, index) => {
-  const difficulty = ISLAND_DIFFICULTY[topic.id] || 'Medium';
-  const intro = ISLAND_INTRO[topic.id] || {
-    title: `${topic.title} Island`,
-    story: `Learn and master essential ${topic.title.toLowerCase()} signs on this exciting island.`,
-    description: `Learn and master essential ${topic.title.toLowerCase()} signs before challenging the island boss.`,
-    objective: 'Clear all word levels to unlock the boss challenge.',
-    hint: 'Use clear hand movement and keep your hand centered in frame.',
-  };
-
-  return {
-    id: topic.id,
-    title: topic.title,
-    order: topic.order || index + 1,
-    icon: topic.icon,
-    difficulty,
-    difficultyRank: difficultyRank[difficulty] || 2,
-    intro,
-    theme: ISLAND_THEME[topic.id] || {
-      sky: 'linear-gradient(180deg, #95c7ff 0%, #3f86d9 100%)',
-      island: 'linear-gradient(180deg, #ffcb80 0%, #f59f4b 100%)',
-    },
-    levels: topic.phrases.map((phrase, phraseIndex) => ({
-      id: makeLevelId(topic.id, phrase.id),
-      phraseId: phrase.id,
-      order: phraseIndex + 1,
-      type: 'phrase',
-      label: phrase.label,
-      description: phrase.description,
-      tip: phrase.tip,
-      rewardXp: XP_PER_LEVEL,
-    })),
-    bossLevel: {
-      id: makeBossLevelId(topic.id),
-      type: 'boss',
-      order: topic.phrases.length + 1,
-      label: `${topic.title} Boss`,
-      description: 'Perform sentence-like combinations using signs learned in this island.',
-      rewardXp: XP_PER_BOSS,
-    },
-  };
+// Intro for alphabet chapters
+const getAlphabetIntro = (chapterNum) => ({
+  title: `Alphabet Chapter ${chapterNum}`,
+  story: `Start your journey by mastering the foundational alphabet letters! Chapter ${chapterNum} covers essential hand positions and shapes.`,
+  description: `Learn and practice the ASL letters in this chapter. Each letter builds the foundation for fluent signing.`,
+  objective: `Complete all letter levels in this chapter.`,
+  hint: 'Hold each letter steady for 1-2 seconds. Clear finger and hand positioning is key!',
 });
+
+// Build alphabet intro map
+const ALPHABET_INTRO = {};
+for (let i = 1; i <= ALPHABET_TOPICS.length; i++) {
+  ALPHABET_INTRO[`alphabet-chapter-${i}`] = getAlphabetIntro(i);
+}
+
+
+export const STUDY_ISLANDS = [
+  // Alphabet chapters first
+  ...ALPHABET_TOPICS.map((topic, index) => {
+    const difficulty = 'Easy';
+    const intro = ALPHABET_INTRO[topic.id] || getAlphabetIntro(index + 1);
+    
+    return {
+      id: topic.id,
+      title: topic.title,
+      order: index + 1,
+      icon: topic.icon,
+      type: 'alphabet',
+      difficulty,
+      difficultyRank: difficultyRank[difficulty] || 1,
+      intro,
+      theme: {
+        sky: 'linear-gradient(180deg, #e0c3fc 0%, #8ec5fc 100%)',
+        island: 'linear-gradient(180deg, #ffd89b 0%, #19547b 100%)',
+      },
+      levels: topic.phrases.map((phrase, phraseIndex) => ({
+        id: makeLevelId(topic.id, phrase.id),
+        phraseId: phrase.id,
+        order: phraseIndex + 1,
+        type: 'letter',
+        label: phrase.label,
+        description: phrase.description,
+        tip: phrase.tip,
+        rewardXp: Math.floor(XP_PER_LEVEL * 0.5), // Less XP for letters
+      })),
+      // No boss level for alphabet
+      bossLevel: null,
+    };
+  }),
+  // Then vocabulary islands
+  ...STUDY_TOPICS.map((topic, index) => {
+    const difficulty = ISLAND_DIFFICULTY[topic.id] || 'Medium';
+    const intro = ISLAND_INTRO[topic.id] || {
+      title: `${topic.title} Island`,
+      story: `Learn and master essential ${topic.title.toLowerCase()} signs on this exciting island.`,
+      description: `Learn and master essential ${topic.title.toLowerCase()} signs before challenging the island boss.`,
+      objective: 'Clear all word levels to unlock the boss challenge.',
+      hint: 'Use clear hand movement and keep your hand centered in frame.',
+    };
+
+    return {
+      id: topic.id,
+      title: topic.title,
+      order: ALPHABET_TOPICS.length + index + 1,
+      icon: topic.icon,
+      type: 'vocabulary',
+      difficulty,
+      difficultyRank: difficultyRank[difficulty] || 2,
+      intro,
+      theme: ISLAND_THEME[topic.id] || {
+        sky: 'linear-gradient(180deg, #95c7ff 0%, #3f86d9 100%)',
+        island: 'linear-gradient(180deg, #ffcb80 0%, #f59f4b 100%)',
+      },
+      levels: topic.phrases.map((phrase, phraseIndex) => ({
+        id: makeLevelId(topic.id, phrase.id),
+        phraseId: phrase.id,
+        order: phraseIndex + 1,
+        type: 'word',
+        label: phrase.label,
+        description: phrase.description,
+        tip: phrase.tip,
+        rewardXp: XP_PER_LEVEL,
+      })),
+      bossLevel: {
+        id: makeBossLevelId(topic.id),
+        type: 'boss',
+        order: topic.phrases.length + 1,
+        label: `${topic.title} Boss`,
+        description: 'Perform sentence-like combinations using signs learned in this island.',
+        rewardXp: XP_PER_BOSS,
+      },
+    };
+  }),
+];
 
 const makeEmptyIslandProgress = () => ({
   completedLevelIds: [],
@@ -154,7 +205,9 @@ const buildBaseProgress = () => {
 const unique = (arr) => Array.from(new Set(Array.isArray(arr) ? arr : []));
 
 const syncLegacyFields = (progress) => {
-  const completedTopics = STUDY_ISLANDS.filter((island) => progress.islands[island.id]?.bossCompleted).map((island) => island.id);
+  const completedTopics = STUDY_ISLANDS
+    .filter((island) => isIslandCompleted(progress, island.id))
+    .map((island) => island.id);
 
   const completedPhraseIds = unique(
     STUDY_ISLANDS.flatMap((island) => {
@@ -189,7 +242,7 @@ const recomputeUnlockedIslands = (progress) => {
     }
 
     const prevIsland = STUDY_ISLANDS[index - 1];
-    if (progress.islands[prevIsland.id]?.bossCompleted) {
+    if (isIslandCompleted(progress, prevIsland.id)) {
       unlocked.push(island.id);
     }
   });
@@ -200,8 +253,10 @@ const recomputeUnlockedIslands = (progress) => {
 const computeXpFromProgress = (progress) => {
   return STUDY_ISLANDS.reduce((acc, island) => {
     const islandProgress = progress.islands[island.id] || makeEmptyIslandProgress();
-    const levelXp = islandProgress.completedLevelIds.length * XP_PER_LEVEL;
-    const bossXp = islandProgress.bossCompleted ? XP_PER_BOSS : 0;
+    const levelXp = island.levels
+      .filter((level) => islandProgress.completedLevelIds.includes(level.id))
+      .reduce((sum, level) => sum + (level.rewardXp || XP_PER_LEVEL), 0);
+    const bossXp = islandProgress.bossCompleted ? (island.bossLevel?.rewardXp || XP_PER_BOSS) : 0;
     return acc + levelXp + bossXp;
   }, 0);
 };
@@ -299,7 +354,17 @@ export const isIslandUnlocked = (progress, islandId) =>
   (progress?.unlockedIslandIds || []).includes(islandId);
 
 export const isIslandCompleted = (progress, islandId) =>
-  Boolean(progress?.islands?.[islandId]?.bossCompleted);
+  (() => {
+    const island = getIslandById(islandId);
+    if (!island) return false;
+
+    const islandProgress = getIslandProgress(progress, islandId);
+    if (island.bossLevel) {
+      return Boolean(islandProgress.bossCompleted);
+    }
+
+    return island.levels.every((level) => islandProgress.completedLevelIds.includes(level.id));
+  })();
 
 export const isLevelCompleted = (progress, islandId, levelId) => {
   const islandProgress = getIslandProgress(progress, islandId);
@@ -309,6 +374,7 @@ export const isLevelCompleted = (progress, islandId, levelId) => {
 export const isBossUnlocked = (progress, islandId) => {
   const island = getIslandById(islandId);
   if (!island) return false;
+  if (!island.bossLevel) return false;
 
   const islandProgress = getIslandProgress(progress, islandId);
   return island.levels.every((level) => islandProgress.completedLevelIds.includes(level.id));
@@ -349,7 +415,7 @@ export const completeIslandLevel = (progress, islandId, levelId) => {
   if (!island) return progress;
 
   const currentIslandProgress = getIslandProgress(progress, islandId);
-  const isBoss = levelId === island.bossLevel.id;
+  const isBoss = Boolean(island.bossLevel && levelId === island.bossLevel.id);
   const phraseLevel = island.levels.find((level) => level.id === levelId);
 
   if (!isBoss && !phraseLevel) return progress;
@@ -362,10 +428,18 @@ export const completeIslandLevel = (progress, islandId, levelId) => {
       return progress;
     }
     updatedIslandProgress.bossCompleted = true;
-    totalXp += island.bossLevel.rewardXp;
+    totalXp += island.bossLevel?.rewardXp || XP_PER_BOSS;
   } else if (!updatedIslandProgress.completedLevelIds.includes(levelId)) {
     updatedIslandProgress.completedLevelIds = [...updatedIslandProgress.completedLevelIds, levelId];
-    totalXp += phraseLevel.rewardXp;
+    totalXp += phraseLevel.rewardXp || XP_PER_LEVEL;
+
+    // Islands without a boss are considered complete when all phrase levels are done.
+    if (!island.bossLevel) {
+      const allDone = island.levels.every((level) => updatedIslandProgress.completedLevelIds.includes(level.id));
+      if (allDone) {
+        updatedIslandProgress.bossCompleted = true;
+      }
+    }
   }
 
   updatedIslandProgress.stars = computeStars(island, updatedIslandProgress);

@@ -1,7 +1,15 @@
 from fastapi import FastAPI
+from fastapi import Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from time import perf_counter
+
+from logging_config import configure_logging, get_logger
 from routes import auth, practice, study
 from routes import gesture
+
+configure_logging()
+logger = get_logger("handspeak.main")
 
 app = FastAPI(title="HandSpeak API", version="1.0.0")
 
@@ -26,6 +34,45 @@ app.include_router(study.router)
 app.include_router(gesture.router)
 
 
+@app.middleware("http")
+async def request_logging_middleware(request: Request, call_next):
+    start = perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception as error:
+        elapsed_ms = (perf_counter() - start) * 1000
+        logger.exception(
+            "request_failed method=%s path=%s ms=%.2f error=%s",
+            request.method,
+            request.url.path,
+            elapsed_ms,
+            type(error).__name__,
+        )
+        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+    elapsed_ms = (perf_counter() - start) * 1000
+    logger.info(
+        "request method=%s path=%s status=%s ms=%.2f",
+        request.method,
+        request.url.path,
+        response.status_code,
+        elapsed_ms,
+    )
+    return response
+
+
+@app.on_event("startup")
+def warmup_gesture_models() -> None:
+    # Warm up each model independently so static and dynamic do not block each other.
+    from services.static_gesture_service import start_static_service_warmup
+    from services.gesture_recognition import start_dynamic_service_warmup
+
+    static_started = start_static_service_warmup()
+    dynamic_started = start_dynamic_service_warmup()
+    logger.info("gesture_warmup_started static=%s dynamic=%s", static_started, dynamic_started)
+
+
 @app.get("/")
 def root():
+    logger.info("root_health_check")
     return {"message": "HandSpeak API is running 🐠"}
