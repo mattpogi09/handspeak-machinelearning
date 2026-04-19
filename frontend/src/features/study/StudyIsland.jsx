@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Crown, Lock, Play, Star, Zap, Target, Hand, Users, Palette, Utensils, PawPrint } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Lock, Play, Star, Zap, Target, Hand, Users, Palette, Utensils, PawPrint } from 'lucide-react';
 import {
   getInitialStudyProgress,
   getStoredStudyProgress,
@@ -8,7 +8,6 @@ import {
   saveStudyProgress,
   isIslandUnlocked,
   isLevelCompleted,
-  isBossUnlocked,
   getIslandProgress,
 } from './studyVoyage';
 import { useIslands } from '../../contexts/IslandsContext';
@@ -88,7 +87,7 @@ export default function StudyIsland() {
           </div>
           <p style={{ fontSize: 22, fontWeight: 900, margin: '0 0 10px' }}>{island.title} is Locked</p>
           <p style={{ color: 'rgba(255,255,255,0.7)', lineHeight: 1.6, marginBottom: 22 }}>
-            Clear the previous island's boss level first to unlock this island.
+            Clear the previous island first to unlock this island.
           </p>
           <button onClick={() => navigate('/study')}
             style={{ border: 'none', borderRadius: 14, padding: '12px 22px', cursor: 'pointer', fontWeight: 900, fontSize: 15, background: 'linear-gradient(135deg,#34d399,#22d3ee)', color: '#064e3b', fontFamily: "'Nunito',sans-serif" }}>
@@ -99,11 +98,8 @@ export default function StudyIsland() {
     );
   }
 
-  const hasBossLevel = Boolean(island.bossLevel);
-  const bossUnlocked = hasBossLevel ? isBossUnlocked(progress, island.id) : false;
   const phraseCompleteCount = island.levels.filter((level) => isLevelCompleted(progress, island.id, level.id)).length;
   const nextPhraseLevel = island.levels.find((level) => !isLevelCompleted(progress, island.id, level.id));
-  const bossCompleted = hasBossLevel ? islandProgress.bossCompleted : false;
   const diff = DIFF_META[island.difficulty] || DIFF_META.Easy;
 
   const launchLevel = (levelId) => navigate(`/study/${island.id}/level/${levelId}`);
@@ -318,118 +314,7 @@ export default function StudyIsland() {
             );
           })}
         </div>
-
-        {/* ── boss level ── */}
-        {hasBossLevel ? (
-          <button
-            onClick={() => bossUnlocked && launchLevel(island.bossLevel.id)}
-            style={{
-              width: '100%', borderRadius: 22,
-              border: bossCompleted
-                ? '2.5px solid rgba(251,191,36,0.75)'
-                : bossUnlocked
-                ? '2.5px solid rgba(251,191,36,0.45)'
-                : '2px solid rgba(255,255,255,0.1)',
-              background: bossCompleted
-                ? 'linear-gradient(135deg,rgba(251,191,36,0.3),rgba(249,115,22,0.3))'
-                : bossUnlocked
-                ? 'rgba(251,191,36,0.1)'
-                : 'rgba(255,255,255,0.06)',
-              backdropFilter: 'blur(10px)',
-              padding: '18px 20px 16px',
-              color: 'white', textAlign: 'left',
-              cursor: bossUnlocked ? 'pointer' : 'not-allowed',
-              opacity: bossUnlocked ? 1 : 0.62,
-              boxShadow: bossUnlocked ? '0 8px 32px rgba(251,191,36,0.2)' : '0 4px 14px rgba(0,0,0,0.2)',
-              fontFamily: "'Nunito',sans-serif",
-              transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-            }}
-            onMouseEnter={e => { if (bossUnlocked) { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 18px 48px rgba(251,191,36,0.35)'; } }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = bossUnlocked ? '0 8px 32px rgba(251,191,36,0.2)' : '0 4px 14px rgba(0,0,0,0.2)'; }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <div style={{
-                  width: 50, height: 50, borderRadius: 16, flexShrink: 0,
-                  background: bossUnlocked ? 'linear-gradient(135deg,#fbbf24,#f97316)' : 'rgba(255,255,255,0.1)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: bossUnlocked ? '0 6px 20px rgba(251,191,36,0.55)' : 'none',
-                  animation: bossUnlocked && !bossCompleted ? 'boss-glow 2s ease-in-out infinite' : undefined,
-                }}>
-                  <Crown size={24} color={bossUnlocked ? 'white' : 'rgba(255,255,255,0.45)'} />
-                </div>
-                <div>
-                  <p style={{ margin: 0, fontSize: 18, fontWeight: 900 }}>{island.bossLevel.label}</p>
-                  <p style={{ margin: '4px 0 0', fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 1.5 }}>
-                    {island.bossLevel.description}
-                  </p>
-                </div>
-              </div>
-
-              {bossCompleted
-                ? <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-                    <Star size={15} fill="#fbbf24" color="#fbbf24" />
-                    <span style={{ fontSize: 11, fontWeight: 900, color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Defeated</span>
-                  </div>
-                : bossUnlocked
-                ? <span style={{
-                    fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.13em',
-                    fontWeight: 900, color: '#fde68a',
-                    background: 'rgba(251,191,36,0.18)', padding: '5px 14px', borderRadius: 99,
-                    border: '1px solid rgba(251,191,36,0.4)', flexShrink: 0,
-                  }}>
-                    Ready
-                  </span>
-                : <span style={{
-                    fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em',
-                    fontWeight: 800, color: 'rgba(255,255,255,0.5)', flexShrink: 0,
-                    display: 'flex', alignItems: 'center', gap: 5,
-                  }}>
-                    <Lock size={13} color="rgba(255,255,255,0.5)" /> Locked
-                  </span>
-              }
-            </div>
-
-            {!bossUnlocked && (
-              <p style={{ margin: '10px 0 0', fontSize: 12, color: 'rgba(255,255,255,0.58)', paddingLeft: 64 }}>
-                Complete all word levels above to unlock this boss challenge.
-              </p>
-            )}
-          </button>
-        ) : (
-          <div
-            style={{
-              width: '100%', borderRadius: 22,
-              border: '2px solid rgba(255,255,255,0.14)',
-              background: 'rgba(255,255,255,0.06)',
-              backdropFilter: 'blur(10px)',
-              padding: '18px 20px 16px',
-              color: 'white', textAlign: 'left',
-              fontFamily: "'Nunito',sans-serif",
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <div style={{
-                width: 50, height: 50, borderRadius: 16, flexShrink: 0,
-                background: 'rgba(255,255,255,0.12)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <CheckCircle2 size={24} color="rgba(255,255,255,0.85)" />
-              </div>
-              <div>
-                <p style={{ margin: 0, fontSize: 18, fontWeight: 900 }}>Chapter Completion</p>
-                <p style={{ margin: '4px 0 0', fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 1.5 }}>
-                  This chapter has no boss level. Complete all levels to finish it.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
       </main>
-
-      <style>{`
-        @keyframes boss-glow { 0%,100%{box-shadow:0 6px 20px rgba(251,191,36,0.55)} 50%{box-shadow:0 6px 32px rgba(251,191,36,0.9)} }
-      `}</style>
     </div>
   );
 }

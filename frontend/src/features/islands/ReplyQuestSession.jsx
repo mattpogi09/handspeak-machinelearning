@@ -86,9 +86,9 @@ export default function ReplyQuestSession() {
     });
   }, [prompts.length, resetFrameBuffer]);
 
-  const submitCurrentFrames = useCallback(async () => {
+  const submitCurrentFrames = useCallback(async (debugOverrideWord = null) => {
     if (isSubmittingRef.current || !currentPrompt || !sessionId) return;
-    if (frameBufferRef.current.length < MIN_FRAMES_FOR_VERIFY) {
+    if (!debugOverrideWord && frameBufferRef.current.length < MIN_FRAMES_FOR_VERIFY) {
       setStatus(`Need ${MIN_FRAMES_FOR_VERIFY - frameBufferRef.current.length} more frame(s) before checking.`);
       return;
     }
@@ -101,7 +101,8 @@ export default function ReplyQuestSession() {
         sessionId,
         promptId: currentPrompt.id,
         userId: getUserId(),
-        frames: frameBufferRef.current,
+        frames: frameBufferRef.current.length ? frameBufferRef.current : ["data:image/jpeg;base64,mock"],
+        debugOverrideWord,
       });
 
       setLatestResult(response);
@@ -234,6 +235,23 @@ export default function ReplyQuestSession() {
         {/* Camera side */}
         <div style={{ flex: 1, background: '#050d18', position: 'relative', borderRadius: '28px 0 0 28px', overflow: 'hidden', minHeight: 500 }}>
           <Camera ref={webcamRef} />
+
+          {/* DEBUG CONTROLS */}
+          <div style={{ position: 'absolute', top: 50, right: 16, zIndex: 50, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button onClick={() => submitCurrentFrames(currentPrompt.expected_word)}
+              style={{ background: '#10b981', color: 'white', border: 'none', padding: '6px 12px', borderRadius: 8, fontSize: 12, cursor: 'pointer', fontWeight: 'bold' }}>
+              Test: Correct
+            </button>
+            <button onClick={() => submitCurrentFrames('wrongword')}
+              style={{ background: '#ef4444', color: 'white', border: 'none', padding: '6px 12px', borderRadius: 8, fontSize: 12, cursor: 'pointer', fontWeight: 'bold' }}>
+              Test: Wrong Word
+            </button>
+            {/* For testing Phase 2 response type mismatches, pass a valid word that is a known wrong type */}
+            <button onClick={() => submitCurrentFrames('hello')}
+              style={{ background: '#f59e0b', color: 'white', border: 'none', padding: '6px 12px', borderRadius: 8, fontSize: 12, cursor: 'pointer', fontWeight: 'bold' }}>
+              Test: Wrong Type
+            </button>
+          </div>
 
           <div style={{ position: 'absolute', top: 16, left: 16, background: recording ? 'rgba(239,68,68,0.9)' : 'rgba(0,0,0,0.55)', borderRadius: 99, padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: recording ? 'white' : '#ef4444', animation: recording ? 'rec-blink 1s ease-in-out infinite' : undefined }} />

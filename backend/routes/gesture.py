@@ -113,6 +113,22 @@ def _build_response(target: str, result: dict) -> GestureVerificationResponse:
 
 
 def _verify_static_internal(body: GestureVerificationRequest) -> GestureVerificationResponse:
+    if body.debug_override_word:
+        expected = (body.target_word or "").strip().upper()
+        override = body.debug_override_word.strip().upper()
+        is_match = (override == expected)
+        res = GestureVerificationResponse(
+            target_word=expected,
+            threshold=body.threshold,
+            is_match=is_match,
+            similarity=0.99 if is_match else 0.1,
+            target_similarity=0.99 if is_match else 0.1,
+            best_match=override if not is_match else expected,
+            top_matches=[]
+        )
+        _record_verification(body, res)
+        return res
+
     from services.static_gesture_service import (
         get_static_service,
         get_static_service_status,
@@ -161,6 +177,21 @@ def _verify_static_internal(body: GestureVerificationRequest) -> GestureVerifica
 
 
 def _verify_dynamic_internal(body: GestureVerificationRequest) -> GestureVerificationResponse:
+    if body.debug_override_word:
+        expected = (body.target_word or "").strip().upper()
+        override = body.debug_override_word.strip().upper()
+        is_match = (override == expected)
+        res = GestureVerificationResponse(
+            target_word=expected,
+            threshold=body.threshold,
+            is_match=is_match,
+            similarity=0.99,
+            target_similarity=0.99 if is_match else 0.1,
+            best_match=override,
+            top_matches=[]
+        )
+        return res
+
     from services.gesture_recognition import (
         get_dynamic_service,
         get_dynamic_service_status,

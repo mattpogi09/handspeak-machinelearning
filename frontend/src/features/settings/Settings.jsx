@@ -228,7 +228,7 @@ export default function Settings({ user, onLogout }) {
               <div style={{ padding: '10px 16px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {islands.map((island) => {
                   const ip = progress?.islands?.[island.id];
-                  const done = ip?.bossCompleted;
+                  const done = ip?.completedLevelIds?.length == island.levels.length;
                   const pct = ip ? Math.round((ip.completedLevelIds.length / Math.max(island.levels.length, 1)) * 100) : 0;
                   const color = ISLAND_COLORS[island.id] || '#60a5fa';
                   return (
@@ -324,7 +324,7 @@ export default function Settings({ user, onLogout }) {
                 </div>
                 <div style={{ height: 1, background: 'rgba(255,255,255,0.08)' }} />
                 <p style={{ margin: 0, fontSize: 14, color: 'rgba(255,255,255,0.75)', lineHeight: 1.65 }}>
-                  A gamified, ocean-themed app for learning American Sign Language. Explore islands, master phrases, defeat bosses, and embark on your Study Voyage!
+                  A gamified, ocean-themed app for learning American Sign Language. Explore islands, master phrases, and embark on your Study Voyage!
                 </p>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {['Word Chapters', '100 Words', 'Model Verification', 'Real-time Camera'].map(t => (

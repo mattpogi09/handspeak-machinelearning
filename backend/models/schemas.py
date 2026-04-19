@@ -69,6 +69,7 @@ class GestureVerificationRequest(BaseModel):
     top_k: int = 5
     threshold: float = 0.72
     user_id: Optional[int] = None
+    debug_override_word: Optional[str] = None
 
 
 class GestureMatch(BaseModel):

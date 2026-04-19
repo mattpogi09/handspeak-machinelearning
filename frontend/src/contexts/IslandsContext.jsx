@@ -22,9 +22,6 @@ const normalizeIsland = (raw) => ({
   hasDrill: raw.has_drill,
   hasConverse: raw.has_converse,
   difficultyRank: raw.difficulty_rank,
-  bossLevel: raw.boss_level
-    ? { ...raw.boss_level, rewardXp: raw.boss_level.reward_xp }
-    : null,
   levels: (raw.levels || []).map(normalizeLevel),
 });
 

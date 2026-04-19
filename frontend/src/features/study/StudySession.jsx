@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { X, Circle, ArrowRight, CheckCircle, Crown, Lock, Star, Lightbulb, Waves } from 'lucide-react';
+import { X, Circle, ArrowRight, CheckCircle, Lock, Star, Lightbulb, Waves } from 'lucide-react';
 import Camera from '../../components/Camera';
 import { postJson } from '../../lib/api';
 import {
@@ -10,9 +10,7 @@ import {
   saveStudyProgress,
   isIslandUnlocked,
   isLevelCompleted,
-  isBossUnlocked,
   completeIslandLevel,
-  buildBossChallenge,
 } from './studyVoyage';
 import { useIslands } from '../../contexts/IslandsContext';
 
@@ -49,9 +47,7 @@ export default function StudySession() {
 
   const island = getIslandById(islandId);
   const phraseLevel = island?.levels.find((level) => level.id === levelId) || null;
-  const isBossLevel = island?.bossLevel?.id === levelId;
-  const activeLevel = isBossLevel ? island?.bossLevel : phraseLevel;
-  const bossChallenge = island && isBossLevel ? buildBossChallenge(island, progress) : null;
+  const activeLevel = phraseLevel;
 
   useEffect(() => {
     let active = true;
@@ -96,16 +92,12 @@ export default function StudySession() {
   const islandUnlocked = isIslandUnlocked(progress, island.id);
   const phraseIndex = island.levels.findIndex((level) => level.id === levelId);
   const phraseUnlocked = phraseIndex === 0 || isLevelCompleted(progress, island.id, island.levels[phraseIndex - 1]?.id);
-  const levelUnlocked = islandUnlocked && (isBossLevel ? isBossUnlocked(progress, island.id) : phraseUnlocked);
-  const alreadyCompleted = isBossLevel
-    ? Boolean(progress.islands?.[island.id]?.bossCompleted)
-    : isLevelCompleted(progress, island.id, activeLevel.id);
+  const levelUnlocked = islandUnlocked && phraseUnlocked;
+  const alreadyCompleted = isLevelCompleted(progress, island.id, activeLevel.id);
 
-  const panelTitle = isBossLevel ? bossChallenge.title : activeLevel.label;
-  const panelDescription = isBossLevel ? bossChallenge.objective : activeLevel.description;
-  const panelTip = isBossLevel
-    ? 'Perform each generated phrase combination in one smooth sequence.'
-    : activeLevel.tip;
+  const panelTitle = activeLevel.label;
+  const panelDescription = activeLevel.description;
+  const panelTip = activeLevel.tip;
 
   /* ASL phrase image — Lifeprint vocabulary GIFs */
   const phraseId = phraseLevel?.phraseId || '';
@@ -123,7 +115,7 @@ export default function StudySession() {
   const captureIntervalMs = isLetterTarget ? LETTER_CAPTURE_INTERVAL_MS : WORD_CAPTURE_INTERVAL_MS;
 
   const verifyCurrentFrames = useCallback(async (triggeredByStop = false) => {
-    if (isSubmittingRef.current || !targetWord || isBossLevel || !levelUnlocked) return;
+    if (isSubmittingRef.current || !targetWord || !levelUnlocked) return;
     if (frameBufferRef.current.length < minFramesForVerify) {
       setStatus(`Need ${minFramesForVerify - frameBufferRef.current.length} more frame(s) before checking`);
       return;
@@ -173,16 +165,11 @@ export default function StudySession() {
     } finally {
       isSubmittingRef.current = false;
     }
-  }, [targetWord, isBossLevel, levelUnlocked, panelTitle, verifyThreshold, minFramesForVerify, verifyEndpoint, verifyModelType]);
+  }, [targetWord, levelUnlocked, panelTitle, verifyThreshold, minFramesForVerify, verifyEndpoint, verifyModelType]);
 
   const handleRecordToggle = useCallback(async () => {
     if (!levelUnlocked) {
       setStatus('This level is locked. Complete previous levels first.');
-      return;
-    }
-
-    if (isBossLevel) {
-      setStatus('Boss levels use the complete button after practicing combinations.');
       return;
     }
 
@@ -214,7 +201,7 @@ export default function StudySession() {
     }
 
     await verifyCurrentFrames(true);
-  }, [recording, isBossLevel, verifyCurrentFrames, takeFrame, frameBufferSize, minFramesForVerify, levelUnlocked]);
+  }, [recording, verifyCurrentFrames, takeFrame, frameBufferSize, minFramesForVerify, levelUnlocked]);
 
   useEffect(() => {
     frameBufferRef.current = [];
@@ -226,7 +213,7 @@ export default function StudySession() {
   }, [levelId]);
 
   useEffect(() => {
-    if (!recording || !levelUnlocked || isBossLevel || !targetWord) return undefined;
+    if (!recording || !levelUnlocked || !targetWord) return undefined;
 
     const intervalId = window.setInterval(async () => {
       if (isSubmittingRef.current || !webcamRef.current) return;
@@ -246,13 +233,13 @@ export default function StudySession() {
     }, captureIntervalMs);
 
     return () => window.clearInterval(intervalId);
-  }, [recording, levelUnlocked, isBossLevel, verifyCurrentFrames, takeFrame, frameBufferSize, minFramesForVerify, captureIntervalMs]);
+  }, [recording, levelUnlocked, verifyCurrentFrames, takeFrame, frameBufferSize, minFramesForVerify, captureIntervalMs]);
 
   useEffect(() => {
-    if (!recording && !showSuccess && !alreadyCompleted && !isBossLevel && status === 'Ready to verify') {
+    if (!recording && !showSuccess && !alreadyCompleted && status === 'Ready to verify') {
       setStatus('Recording stopped. Press record to continue.');
     }
-  }, [recording, showSuccess, alreadyCompleted, isBossLevel, status]);
+  }, [recording, showSuccess, alreadyCompleted, status]);
 
   const markComplete = () => {
     if (!levelUnlocked || alreadyCompleted) return;
@@ -264,7 +251,6 @@ export default function StudySession() {
 
     setTimeout(() => {
       setShowSuccess(false);
-      if (isBossLevel) { navigate('/study'); return; }
       const nextLevel = island.levels[phraseIndex + 1];
       if (nextLevel) { navigate(`/study/${island.id}/level/${nextLevel.id}`); return; }
       navigate(`/study/${island.id}`);
@@ -290,18 +276,18 @@ export default function StudySession() {
           <div style={{ textAlign: 'center', animation: 'pop-in 0.35s cubic-bezier(0.34,1.56,0.64,1)' }}>
             <div style={{
               width: 90, height: 90, borderRadius: '50%',
-              background: isBossLevel ? 'linear-gradient(135deg,#fbbf24,#f97316)' : 'linear-gradient(135deg,#34d399,#22d3ee)',
+              background: 'linear-gradient(135deg,#34d399,#22d3ee)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               margin: '0 auto 18px',
-              boxShadow: isBossLevel ? '0 8px 32px rgba(251,191,36,0.55)' : '0 8px 32px rgba(52,211,153,0.55)',
+              boxShadow: '0 8px 32px rgba(52,211,153,0.55)',
             }}>
-              {isBossLevel ? <Crown size={40} color="white" /> : <CheckCircle size={40} color="white" />}
+              <CheckCircle size={40} color="white" />
             </div>
             <p style={{ fontSize: 28, fontWeight: 900, color: 'white', margin: '0 0 8px' }}>
-              {isBossLevel ? 'Boss Defeated!' : 'Level Complete!'}
+              Level Complete!
             </p>
             <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.75)', margin: 0, fontWeight: 700 }}>
-              {isBossLevel ? 'Island cleared!' : 'Moving to next level...'}
+              Moving to next level...
             </p>
           </div>
         </div>
@@ -338,6 +324,45 @@ export default function StudySession() {
         }}>
           <Camera ref={webcamRef} />
 
+          {/* DEBUG CONTROLS */}
+          <div style={{ position: 'absolute', top: 50, right: 16, zIndex: 50, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button onClick={async () => {
+              isSubmittingRef.current = true;
+              try {
+                const response = await postJson(verifyEndpoint, { target_word: targetWord, frames: ["data:image/jpeg;base64,mock"], top_k: 5, threshold: verifyThreshold, debug_override_word: targetWord });
+                setLatestResult(response);
+                if (response.is_match) {
+                  setMatchStreak((value) => {
+                    const next = value + 1;
+                    setStatus(`Match ${next}/${REQUIRED_STREAK}`);
+                    if (next >= REQUIRED_STREAK) {
+                      setMatchStreak(0);
+                      setRecording(false);
+                      markComplete();
+                    }
+                    return next;
+                  });
+                }
+              } finally { isSubmittingRef.current = false; }
+            }}
+              style={{ background: '#10b981', color: 'white', border: 'none', padding: '6px 12px', borderRadius: 8, fontSize: 12, cursor: 'pointer', fontWeight: 'bold' }}>
+              Test: Correct
+            </button>
+            <button onClick={async () => {
+              isSubmittingRef.current = true;
+              try {
+                const response = await postJson(verifyEndpoint, { target_word: targetWord, frames: ["data:image/jpeg;base64,mock"], top_k: 5, threshold: verifyThreshold, debug_override_word: 'wrongword' });
+                setLatestResult(response);
+                setStatus(`Closest: ${response.best_match}`);
+                setMatchStreak(0);
+              } finally { isSubmittingRef.current = false; }
+            }}
+              style={{ background: '#ef4444', color: 'white', border: 'none', padding: '6px 12px', borderRadius: 8, fontSize: 12, cursor: 'pointer', fontWeight: 'bold' }}>
+              Test: Wrong Word
+            </button>
+          </div>
+
+
           {/* recording hint */}
           <div style={{
             position: 'absolute', top: 16, left: 16,
@@ -372,15 +397,13 @@ export default function StudySession() {
             <Circle size={32} fill={recording ? 'white' : '#e63946'} color={recording ? 'white' : '#e63946'} />
           </button>
 
-          {!isBossLevel && (
-            <div style={{
-              position: 'absolute', bottom: 122, left: '50%', transform: 'translateX(-50%)',
-              background: 'rgba(2,10,28,0.75)', border: '1px solid rgba(255,255,255,0.18)',
-              borderRadius: 10, padding: '6px 10px', color: 'white', fontSize: 12, fontWeight: 800,
-            }}>
-              Frames: {capturedFrames}/{minFramesForVerify}
-            </div>
-          )}
+          <div style={{
+            position: 'absolute', bottom: 122, left: '50%', transform: 'translateX(-50%)',
+            background: 'rgba(2,10,28,0.75)', border: '1px solid rgba(255,255,255,0.18)',
+            borderRadius: 10, padding: '6px 10px', color: 'white', fontSize: 12, fontWeight: 800,
+          }}>
+            Frames: {capturedFrames}/{minFramesForVerify}
+          </div>
         </div>
 
         {/* ── info panel ── */}
@@ -395,27 +418,26 @@ export default function StudySession() {
           {/* level indicator */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{
-              background: isBossLevel ? 'linear-gradient(135deg,#fbbf24,#f97316)' : 'rgba(52,211,153,0.2)',
-              border: isBossLevel ? 'none' : '1px solid rgba(52,211,153,0.4)',
+              background: 'rgba(52,211,153,0.2)',
+              border: '1px solid rgba(52,211,153,0.4)',
               borderRadius: 99, padding: '4px 14px',
               display: 'flex', alignItems: 'center', gap: 6,
             }}>
-              {isBossLevel ? <Crown size={13} color="white" /> : null}
-              <span style={{ fontSize: 10, fontWeight: 900, color: isBossLevel ? 'white' : '#34d399', textTransform: 'uppercase', letterSpacing: '0.18em' }}>
-                {isBossLevel ? 'Boss Level' : 'Practice'}
+              <span style={{ fontSize: 10, fontWeight: 900, color: '#34d399', textTransform: 'uppercase', letterSpacing: '0.18em' }}>
+                Practice
               </span>
             </div>
             <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.48)', fontWeight: 700 }}>
-              {isBossLevel ? 'Boss Challenge' : `Level ${activeLevel.order} / ${island.levels.length}`}
+              Level {activeLevel.order} / {island.levels.length}
             </span>
           </div>
 
           {/* title */}
           <div style={{
-            fontSize: isBossLevel ? 26 : 30, fontWeight: 900, color: 'white',
+            fontSize: 30, fontWeight: 900, color: 'white',
             lineHeight: 1.2, textAlign: 'center',
             textShadow: '0 2px 12px rgba(0,0,0,0.5)',
-            background: isBossLevel ? 'linear-gradient(135deg,#fbbf24,#f97316)' : 'linear-gradient(135deg,#34d399,#22d3ee)',
+            background: 'linear-gradient(135deg,#34d399,#22d3ee)',
             WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
             backgroundClip: 'text',
           }}>
@@ -425,64 +447,36 @@ export default function StudySession() {
           <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', flexShrink: 0 }} />
 
           {/* ASL hand sign reference image */}
-          {!isBossLevel && (
-            <div>
-              <p style={{ margin: '0 0 7px', fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.15em' }}>
-                Hand Sign Reference
-              </p>
-              <div style={{
-                borderRadius: 18, overflow: 'hidden',
-                background: 'rgba(255,255,255,0.95)',
-                border: '2px solid rgba(255,255,255,0.2)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                height: 150, flexShrink: 0,
-                boxShadow: '0 6px 20px rgba(0,0,0,0.28)',
-              }}>
-                {phraseImgSrc && imgOk ? (
-                  <img
-                    key={phraseId}
-                    src={phraseImgSrc}
-                    alt={`ASL sign for ${activeLevel.label}`}
-                    style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain' }}
-                    onError={() => setImgOk(false)}
-                  />
-                ) : (
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: 48, fontWeight: 900, color: '#0ea5e9', lineHeight: 1 }}>
-                      {activeLevel.label}
-                    </div>
-                    <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, marginTop: 5 }}>ASL Sign</div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* boss combos */}
-          {isBossLevel && (
+          <div>
+            <p style={{ margin: '0 0 7px', fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.15em' }}>
+              Hand Sign Reference
+            </p>
             <div style={{
-              borderRadius: 16, border: '1.5px solid rgba(251,191,36,0.4)',
-              background: 'rgba(251,191,36,0.1)', padding: '13px 14px', flexShrink: 0,
+              borderRadius: 18, overflow: 'hidden',
+              background: 'rgba(255,255,255,0.95)',
+              border: '2px solid rgba(255,255,255,0.2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              height: 150, flexShrink: 0,
+              boxShadow: '0 6px 20px rgba(0,0,0,0.28)',
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
-                <Crown size={14} color="#fbbf24" />
-                <span style={{ fontSize: 11, fontWeight: 900, color: '#fbbf24', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-                  Boss Combos
-                </span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                {bossChallenge.combinations.map((combo) => (
-                  <div key={combo} style={{
-                    borderRadius: 10, background: 'rgba(255,255,255,0.08)',
-                    border: '1px solid rgba(255,255,255,0.14)',
-                    padding: '8px 12px', fontSize: 13, color: '#fff7de', fontWeight: 800,
-                  }}>
-                    {combo}
+              {phraseImgSrc && imgOk ? (
+                <img
+                  key={phraseId}
+                  src={phraseImgSrc}
+                  alt={`ASL sign for ${activeLevel.label}`}
+                  style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain' }}
+                  onError={() => setImgOk(false)}
+                />
+              ) : (
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 48, fontWeight: 900, color: '#0ea5e9', lineHeight: 1 }}>
+                    {activeLevel.label}
                   </div>
-                ))}
-              </div>
+                  <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, marginTop: 5 }}>ASL Sign</div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
 
           {/* description */}
           <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.82)', lineHeight: 1.65, margin: 0 }}>
@@ -500,41 +494,39 @@ export default function StudySession() {
             <span><strong>Tip:</strong> {panelTip}</span>
           </div>
 
-          {!isBossLevel && (
-            <div style={{
-              borderRadius: 14,
-              background: latestResult?.is_match ? 'rgba(34,197,94,0.16)' : 'rgba(255,255,255,0.08)',
-              border: '1px solid rgba(255,255,255,0.14)',
-              padding: '11px 12px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 6,
-            }}>
-              <span style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 900, color: 'rgba(255,255,255,0.56)' }}>
-                Live Verification
-              </span>
-              <p style={{ margin: 0, fontSize: 14, color: 'white', fontWeight: 800 }}>{status}</p>
-              <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.68)' }}>
-                {latestResult
-                  ? `Best: ${latestResult.best_match} · Similarity: ${latestResult.similarity.toFixed(3)}`
-                  : 'Press record and hold the target sign in frame.'}
+          <div style={{
+            borderRadius: 14,
+            background: latestResult?.is_match ? 'rgba(34,197,94,0.16)' : 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.14)',
+            padding: '11px 12px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+          }}>
+            <span style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 900, color: 'rgba(255,255,255,0.56)' }}>
+              Live Verification
+            </span>
+            <p style={{ margin: 0, fontSize: 14, color: 'white', fontWeight: 800 }}>{status}</p>
+            <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.68)' }}>
+              {latestResult
+                ? `Best: ${latestResult.best_match} · Similarity: ${latestResult.similarity.toFixed(3)}`
+                : 'Press record and hold the target sign in frame.'}
+            </p>
+            <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.56)' }}>
+              Model: {verifyModelType === 'static' ? 'Static (letter)' : 'Dynamic (word)'}
+            </p>
+            {matchStreak > 0 && (
+              <p style={{ margin: 0, fontSize: 12, color: '#86efac', fontWeight: 800 }}>
+                Correct streak: {matchStreak}/{REQUIRED_STREAK}
               </p>
-              <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.56)' }}>
-                Model: {verifyModelType === 'static' ? 'Static (letter)' : 'Dynamic (word)'}
-              </p>
-              {matchStreak > 0 && (
-                <p style={{ margin: 0, fontSize: 12, color: '#86efac', fontWeight: 800 }}>
-                  Correct streak: {matchStreak}/{REQUIRED_STREAK}
-                </p>
-              )}
-            </div>
-          )}
+            )}
+          </div>
 
           {/* level dots */}
           <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
             {island.levels.map((level) => {
               const done = isLevelCompleted(progress, island.id, level.id);
-              const current = !isBossLevel && level.id === activeLevel.id;
+              const current = level.id === activeLevel.id;
               return (
                 <div key={level.id} style={{
                   borderRadius: 99, padding: '4px 10px', fontSize: 11, fontWeight: 800,
@@ -548,16 +540,6 @@ export default function StudySession() {
                 </div>
               );
             })}
-            <div style={{
-              borderRadius: 99, padding: '4px 10px', fontSize: 11, fontWeight: 800,
-              letterSpacing: '0.04em',
-              color: isBossLevel ? '#451a03' : 'rgba(255,255,255,0.7)',
-              background: isBossLevel ? '#fbbf24' : 'rgba(255,255,255,0.12)',
-              boxShadow: isBossLevel ? '0 0 0 2px rgba(251,191,36,0.6)' : 'none',
-              display: 'flex', alignItems: 'center', gap: 4,
-            }}>
-              <Crown size={10} color={isBossLevel ? '#451a03' : 'rgba(255,255,255,0.7)'} /> Boss
-            </div>
           </div>
 
           {/* locked notice */}
@@ -585,29 +567,24 @@ export default function StudySession() {
           {/* action button */}
           <button
             onClick={markComplete}
-            disabled={!levelUnlocked || alreadyCompleted || (!isBossLevel && !latestResult?.is_match)}
+            disabled={!levelUnlocked || alreadyCompleted || !latestResult?.is_match}
             style={{
               width: '100%', padding: '16px 0', borderRadius: 18, border: 'none',
-              background: isBossLevel
-                ? 'linear-gradient(135deg,#fbbf24,#f97316)'
-                : 'linear-gradient(135deg,#34d399,#22d3ee)',
-              color: isBossLevel ? '#451a03' : '#064e3b',
+              background: 'linear-gradient(135deg,#34d399,#22d3ee)',
+              color: '#064e3b',
               fontSize: 16,
               fontWeight: 900,
-              cursor: !levelUnlocked || alreadyCompleted || (!isBossLevel && !latestResult?.is_match) ? 'not-allowed' : 'pointer',
-              opacity: !levelUnlocked || alreadyCompleted || (!isBossLevel && !latestResult?.is_match) ? 0.5 : 1,
+              cursor: !levelUnlocked || alreadyCompleted || !latestResult?.is_match ? 'not-allowed' : 'pointer',
+              opacity: !levelUnlocked || alreadyCompleted || !latestResult?.is_match ? 0.5 : 1,
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              boxShadow: !levelUnlocked || alreadyCompleted ? 'none'
-                : isBossLevel ? '0 8px 28px rgba(251,191,36,0.55)' : '0 8px 28px rgba(52,211,153,0.45)',
+              boxShadow: !levelUnlocked || alreadyCompleted ? 'none' : '0 8px 28px rgba(52,211,153,0.45)',
               flexShrink: 0, fontFamily: "'Nunito',sans-serif",
               transition: 'transform 0.18s ease, opacity 0.2s ease',
             }}
-            onMouseEnter={e => { if (!(!levelUnlocked || alreadyCompleted || (!isBossLevel && !latestResult?.is_match))) { e.currentTarget.style.transform = 'translateY(-2px)'; } }}
+            onMouseEnter={e => { if (!(!levelUnlocked || alreadyCompleted || !latestResult?.is_match)) { e.currentTarget.style.transform = 'translateY(-2px)'; } }}
             onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}
           >
-            {isBossLevel
-              ? <><Crown size={18} /> Defeat Boss</>  
-              : <>Verified Complete <ArrowRight size={18} /></>}
+            <>Verified Complete <ArrowRight size={18} /></>
           </button>
         </div>
       </div>

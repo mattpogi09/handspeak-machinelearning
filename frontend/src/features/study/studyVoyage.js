@@ -5,7 +5,6 @@ export const ISLANDS_STORAGE_KEY = 'handspeak_islands_cache';
 
 const USER_STORAGE_KEY = 'handspeak_user';
 const XP_PER_LEVEL = 10;
-const XP_PER_BOSS = 40;
 const PLAYER_LEVEL_XP_STEP = 50;
 
 const _loadCachedIslands = () => {
@@ -28,7 +27,6 @@ export const setIslandsCache = (islands) => {
 
 const makeEmptyIslandProgress = () => ({
   completedLevelIds: [],
-  bossCompleted: false,
   introSeen: false,
   stars: 0,
 });
@@ -76,7 +74,7 @@ const computeStars = (island, islandProgress) => {
   const phraseStars = island.levels.filter((level) =>
     islandProgress.completedLevelIds.includes(level.id)
   ).length;
-  return phraseStars + (islandProgress.bossCompleted ? 1 : 0);
+  return phraseStars;
 };
 
 const recomputeUnlockedIslands = (progress) => {
@@ -95,8 +93,7 @@ const computeXpFromProgress = (progress) =>
     const levelXp = island.levels
       .filter((level) => islandProgress.completedLevelIds.includes(level.id))
       .reduce((sum, level) => sum + (level.rewardXp || XP_PER_LEVEL), 0);
-    const bossXp = islandProgress.bossCompleted ? (island.bossLevel?.rewardXp || XP_PER_BOSS) : 0;
-    return acc + levelXp + bossXp;
+    return acc + levelXp;
   }, 0);
 
 const normalizeV2Progress = (raw) => {
@@ -112,7 +109,6 @@ const normalizeV2Progress = (raw) => {
       ...makeEmptyIslandProgress(),
       ...rawIsland,
       completedLevelIds,
-      bossCompleted: Boolean(rawIsland.bossCompleted),
       introSeen: Boolean(rawIsland.introSeen),
     };
     islandProgress.stars = computeStars(island, islandProgress);
@@ -140,7 +136,6 @@ const migrateLegacyProgress = (raw) => {
     const islandProgress = {
       ...makeEmptyIslandProgress(),
       completedLevelIds: doneLevels,
-      bossCompleted: completedTopics.includes(island.id),
       introSeen: doneLevels.length > 0 || completedTopics.includes(island.id),
     };
     islandProgress.stars = computeStars(island, islandProgress);
@@ -214,19 +209,11 @@ export const isIslandCompleted = (progress, islandId) => {
   const island = getIslandById(islandId);
   if (!island) return false;
   const islandProgress = getIslandProgress(progress, islandId);
-  if (island.bossLevel) return Boolean(islandProgress.bossCompleted);
   return island.levels.every((level) => islandProgress.completedLevelIds.includes(level.id));
 };
 
 export const isLevelCompleted = (progress, islandId, levelId) =>
   getIslandProgress(progress, islandId).completedLevelIds.includes(levelId);
-
-export const isBossUnlocked = (progress, islandId) => {
-  const island = getIslandById(islandId);
-  if (!island || !island.bossLevel) return false;
-  const islandProgress = getIslandProgress(progress, islandId);
-  return island.levels.every((level) => islandProgress.completedLevelIds.includes(level.id));
-};
 
 export const getCurrentIslandId = (progress) => {
   const current = STUDY_ISLANDS.find(
@@ -256,28 +243,16 @@ export const completeIslandLevel = (progress, islandId, levelId) => {
   if (!island) return progress;
 
   const currentIslandProgress = getIslandProgress(progress, islandId);
-  const isBoss = Boolean(island.bossLevel && levelId === island.bossLevel.id);
   const phraseLevel = island.levels.find((level) => level.id === levelId);
 
-  if (!isBoss && !phraseLevel) return progress;
+  if (!phraseLevel) return progress;
 
   let totalXp = progress.totalXp;
   let updatedIslandProgress = { ...currentIslandProgress };
 
-  if (isBoss) {
-    if (updatedIslandProgress.bossCompleted || !isBossUnlocked(progress, islandId)) return progress;
-    updatedIslandProgress.bossCompleted = true;
-    totalXp += island.bossLevel?.rewardXp || XP_PER_BOSS;
-  } else if (!updatedIslandProgress.completedLevelIds.includes(levelId)) {
+  if (!updatedIslandProgress.completedLevelIds.includes(levelId)) {
     updatedIslandProgress.completedLevelIds = [...updatedIslandProgress.completedLevelIds, levelId];
     totalXp += phraseLevel.rewardXp || XP_PER_LEVEL;
-
-    if (!island.bossLevel) {
-      const allDone = island.levels.every((level) =>
-        updatedIslandProgress.completedLevelIds.includes(level.id)
-      );
-      if (allDone) updatedIslandProgress.bossCompleted = true;
-    }
   }
 
   updatedIslandProgress.stars = computeStars(island, updatedIslandProgress);
@@ -314,36 +289,3 @@ export const getVoyageStats = (progress) => {
   };
 };
 
-export const buildBossChallenge = (island, progress) => {
-  const islandProgress = getIslandProgress(progress, island.id);
-  const completedLabels = island.levels
-    .filter((level) => islandProgress.completedLevelIds.includes(level.id))
-    .map((level) => level.label);
-
-  const pool = completedLabels.length > 0 ? completedLabels : island.levels.map((level) => level.label);
-  if (pool.length === 0) {
-    return {
-      title: `${island.title} Sentence Boss`,
-      objective: 'Combine learned signs into sentence-like patterns.',
-      combinations: ['Practice 2 to 3 signs in sequence.'],
-    };
-  }
-
-  const combinations = [];
-  for (let i = 0; i < Math.min(3, pool.length + 1); i += 1) {
-    const first = pool[i % pool.length];
-    const second = pool[(i + 1) % pool.length];
-    const third = pool[(i + 2) % pool.length];
-    if (pool.length >= 3 && i === 2) {
-      combinations.push(`${first} + ${second} + ${third}`);
-    } else {
-      combinations.push(`${first} + ${second}`);
-    }
-  }
-
-  return {
-    title: `${island.title} Sentence Boss`,
-    objective: 'Sign each combination smoothly in order, like one complete sentence.',
-    combinations: unique(combinations),
-  };
-};

@@ -161,6 +161,55 @@ export default function WordStudySession() {
         <div style={{ flex: 1, background: '#050d18', position: 'relative', borderRadius: '28px 0 0 28px', overflow: 'hidden', minHeight: 500 }}>
           <Camera ref={webcamRef} />
 
+          {/* DEBUG CONTROLS */}
+          <div style={{ position: 'absolute', top: 50, right: 16, zIndex: 50, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button onClick={async () => {
+              isSubmittingRef.current = true;
+              try {
+                const response = await postJson('/api/gesture/verify/dynamic', { target_word: currentWord.word, frames: ["data:image/jpeg;base64,mock"], top_k: 5, threshold: 0.1, debug_override_word: currentWord.word });
+                setLatestResult(response);
+                if (response.is_match) {
+                  setMatchStreak((value) => {
+                    const nextValue = value + 1;
+                    setStatus(`Match ${nextValue}/${REQUIRED_STREAK}`);
+                    if (nextValue >= REQUIRED_STREAK) {
+                      setTimeout(() => {
+                        setMatchStreak(0); setLatestResult(null);
+                        setCompletedWords((current) => {
+                          const next = current.includes(currentWord.id) ? current : [...current, currentWord.id];
+                          const cp = getStoredStudyProgress();
+                          saveStudyProgress({ ...cp, completed_phrases: next });
+                          return next;
+                        });
+                        const idx = words.findIndex(w => w.id === currentWord.id);
+                        if (idx !== -1 && idx < words.length - 1) { setCurrentWord(words[idx + 1]); } else { navigate('/study'); }
+                      }, 1000);
+                      return nextValue;
+                    }
+                    return nextValue;
+                  });
+                }
+              } finally { isSubmittingRef.current = false; }
+            }}
+              style={{ background: '#10b981', color: 'white', border: 'none', padding: '6px 12px', borderRadius: 8, fontSize: 12, cursor: 'pointer', fontWeight: 'bold' }}>
+              Test: Correct
+            </button>
+            <button onClick={async () => {
+              isSubmittingRef.current = true;
+              try {
+                const response = await postJson('/api/gesture/verify/dynamic', { target_word: currentWord.word, frames: ["data:image/jpeg;base64,mock"], top_k: 5, threshold: 0.1, debug_override_word: 'wrongword' });
+                setLatestResult(response);
+                setStatus(`Closest: ${response.best_match}`);
+                setMatchStreak(0);
+              } finally { isSubmittingRef.current = false; }
+            }}
+              style={{ background: '#ef4444', color: 'white', border: 'none', padding: '6px 12px', borderRadius: 8, fontSize: 12, cursor: 'pointer', fontWeight: 'bold' }}>
+              Test: Wrong Word
+            </button>
+          </div>
+
+
+
           <div style={{ position: 'absolute', top: 16, left: 16, background: recording ? 'rgba(239,68,68,0.9)' : 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', borderRadius: 99, padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: recording ? 'white' : '#ef4444', animation: recording ? 'rec-blink 1s ease-in-out infinite' : undefined }} />
             <span style={{ fontSize: 11, fontWeight: 900, color: 'white', letterSpacing: '0.12em', textTransform: 'uppercase' }}>{recording ? 'Recording' : 'Camera'}</span>

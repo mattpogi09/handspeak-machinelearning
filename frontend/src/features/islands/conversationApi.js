@@ -6,12 +6,13 @@ export const startConversationSession = ({ userId, islandId }) =>
     island_id: islandId,
   });
 
-export const submitConversationAttempt = ({ sessionId, promptId, userId, frames }) =>
+export const submitConversationAttempt = ({ sessionId, promptId, userId, frames, debugOverrideWord }) =>
   postJson('/api/conversation/session/submit', {
     session_id: sessionId,
     prompt_id: promptId,
     user_id: userId ?? null,
     frames,
+    ...(debugOverrideWord && { debug_override_word: debugOverrideWord }),
   });
 
 export const listIslandPrompts = (islandId) =>
@@ -31,12 +32,13 @@ export const startChainSession = ({ userId, islandId, chainId }) =>
     chain_id: chainId,
   });
 
-export const submitChainTurn = ({ chainSessionId, turnIndex, userId, frames }) =>
+export const submitChainTurn = ({ chainSessionId, turnIndex, userId, frames, debugOverrideWord }) =>
   postJson('/api/conversation/chain/submit', {
     chain_session_id: chainSessionId,
     turn_index: turnIndex,
     user_id: userId ?? null,
     frames,
+    ...(debugOverrideWord && { debug_override_word: debugOverrideWord }),
   });
 
 export const getChainSession = (chainSessionId) =>

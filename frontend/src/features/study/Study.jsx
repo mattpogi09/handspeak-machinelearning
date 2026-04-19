@@ -134,7 +134,7 @@ export default function Study() {
             Study Voyage World
           </h1>
           <p style={{ margin: '3px 0 0', fontSize: 11, color: 'rgba(255,255,255,0.65)', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700 }}>
-            Explore islands · Learn signs · Defeat bosses
+            Explore islands · Learn signs
           </p>
         </div>
 

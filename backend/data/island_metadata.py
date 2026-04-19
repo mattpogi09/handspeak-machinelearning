@@ -11,7 +11,6 @@ from typing import Any
 
 XP_PER_LEVEL = 10
 XP_PER_ALPHABET_LEVEL = 5
-XP_PER_BOSS = 40
 
 # ── Dedicated conversation islands ────────────────────────────────────────────
 # These are not derived from asl_data.py — they are thematic conversation worlds.
@@ -65,7 +64,6 @@ CONVERSATION_ISLANDS: list[dict[str, Any]] = [
             "island": "linear-gradient(180deg,#ffd36f 0%,#ffb347 100%)",
         },
         "levels": [],
-        "boss_level": None,
     },
 ]
 
@@ -181,7 +179,6 @@ def _build_alphabet_island(topic: dict, order: int) -> dict[str, Any]:
             }
             for i, p in enumerate(topic["phrases"])
         ],
-        "boss_level": None,
     }
 
 
@@ -219,19 +216,11 @@ def _build_vocab_island(topic: dict, order: int, idx: int) -> dict[str, Any]:
             "title": f"{title} Island",
             "story": meta.get("story", f"Learn and master essential signs in {title} on this island."),
             "description": f"Practice these signs and build your vocabulary for {title.lower()}.",
-            "objective": f"Complete all levels to unlock the {title} Boss Challenge.",
+            "objective": f"Complete all levels.",
             "hint": meta.get("hint", "Keep your hand centered and clearly visible in the frame."),
         },
         "theme": meta.get("theme", _DEFAULT_THEMES[idx % len(_DEFAULT_THEMES)]),
         "levels": levels,
-        "boss_level": {
-            "id": f"{topic['id']}::boss",
-            "type": "boss",
-            "order": len(levels) + 1,
-            "label": f"{title} Boss",
-            "description": "Perform combinations using signs learned in this island.",
-            "reward_xp": XP_PER_BOSS,
-        },
     }
 
 
