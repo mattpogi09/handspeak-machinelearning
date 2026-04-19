@@ -1,204 +1,545 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Lock, Play, CheckCircle2 } from 'lucide-react';
-import { STUDY_TOPICS } from '../../data/aslData';
+import { ArrowLeft, CheckCircle2, Compass, Lock, Star, Zap, Target, Lightbulb, Hand, Users, Palette, Utensils, PawPrint } from 'lucide-react';
+import {
+  STUDY_ISLANDS,
+  getInitialStudyProgress,
+  getStoredStudyProgress,
+  saveStudyProgress,
+  isIslandUnlocked,
+  isIslandCompleted,
+  getCurrentIslandId,
+  getVoyageStats,
+  setIslandIntroSeen,
+} from './studyVoyage';
 
-/* ── Cute Whale SVG ── */
-function WhaleSvg() {
-  return (
-    <svg viewBox="0 0 110 80" width="80" height="58" fill="none">
-      {/* Tail flukes — horizontal, left side */}
-      <path d="M20,36 C8,24 0,14 0,8 C6,16 14,26 22,34Z" fill="#3A7BC8"/>
-      <path d="M20,44 C8,56 0,66 0,72 C6,64 14,54 22,46Z" fill="#3A7BC8"/>
-      <ellipse cx="18" cy="40" rx="8" ry="5" fill="#4A8BC2"/>
-      {/* Body */}
-      <ellipse cx="60" cy="46" rx="44" ry="26" fill="#5B9BD5"/>
-      {/* Belly */}
-      <ellipse cx="57" cy="58" rx="31" ry="13" fill="#A8D4F0"/>
-      {/* Head — round, right */}
-      <circle cx="90" cy="44" r="21" fill="#5B9BD5"/>
-      {/* Eye */}
-      <circle cx="97" cy="37" r="6" fill="white"/>
-      <circle cx="98" cy="36" r="3.2" fill="#111827"/>
-      <circle cx="100" cy="34" r="1.4" fill="white"/>
-      {/* Smile */}
-      <path d="M82,54 Q90,62 103,57" stroke="#3A7BC8" strokeWidth="2" fill="none" strokeLinecap="round"/>
-      {/* Blowhole */}
-      <ellipse cx="77" cy="25" rx="5" ry="3" fill="#3A7BC8"/>
-      {/* Spout — fan/cloud shape (single closed path, NOT separate lines) */}
-      <path d="M72,24 Q60,8 67,2 Q72,8 77,15 Q82,8 87,2 Q94,8 82,24Z"
-        fill="#B3E5FC" opacity="0.9"/>
-      {/* Water droplets at top of fan */}
-      <circle cx="66" cy="4" r="2.8" fill="#87CEEB" opacity="0.9"/>
-      <circle cx="77" cy="1" r="2.2" fill="#B3E5FC" opacity="0.9"/>
-      <circle cx="88" cy="4" r="2.5" fill="#87CEEB" opacity="0.9"/>
-      {/* Flipper */}
-      <path d="M58,66 Q68,78 78,72 Q74,62 62,60Z" fill="#4A8BC2"/>
-    </svg>
-  );
-}
+const DIFF_META = {
+  Easy:   { label: 'Easy',   bg: 'linear-gradient(135deg,#22d3ee,#06b6d4)', text: '#083344', shadow: 'rgba(6,182,212,0.5)' },
+  Medium: { label: 'Medium', bg: 'linear-gradient(135deg,#fb923c,#ef4444)', text: '#fff7f0', shadow: 'rgba(251,146,60,0.5)' },
+  Hard:   { label: 'Hard',   bg: 'linear-gradient(135deg,#a855f7,#7c3aed)', text: '#faf0ff', shadow: 'rgba(168,85,247,0.5)' },
+};
+
+/* Map each island id → Lucide icon component + display color */
+const ISLAND_ICONS = {
+  greetings: { Icon: Hand,     color: '#0ea5e9' },
+  family:    { Icon: Users,    color: '#22c55e' },
+  colors:    { Icon: Palette,  color: '#a855f7' },
+  food:      { Icon: Utensils, color: '#f97316' },
+  animals:   { Icon: PawPrint, color: '#14b8a6' },
+};
 
 export default function Study() {
   const navigate = useNavigate();
-  const [progress, setProgress] = useState({ completed_topics: [], level: 1 });
+  const [progress, setProgress] = useState(getInitialStudyProgress());
+  const [selectedIslandId, setSelectedIslandId] = useState(null);
+  const [lockedHint, setLockedHint] = useState('');
 
   useEffect(() => {
-    const stored = localStorage.getItem('handspeak_study_progress');
-    if (stored) setProgress(JSON.parse(stored));
+    const normalized = getStoredStudyProgress();
+    setProgress(normalized);
+    saveStudyProgress(normalized);
   }, []);
 
-  const isUnlocked = (topic, idx) => {
-    if (idx === 0) return true;
-    const prev = STUDY_TOPICS[idx - 1];
-    return progress.completed_topics.includes(prev.id);
+  const stats = useMemo(() => getVoyageStats(progress), [progress]);
+  const activeIslandId = useMemo(() => getCurrentIslandId(progress), [progress]);
+  const selectedIsland = useMemo(
+    () => STUDY_ISLANDS.find((island) => island.id === selectedIslandId) || null,
+    [selectedIslandId]
+  );
+
+  const openIslandIntro = (island, index) => {
+    if (!isIslandUnlocked(progress, island.id)) {
+      const prev = STUDY_ISLANDS[index - 1];
+      setLockedHint(prev
+        ? `Finish "${prev.title}" island first to unlock this one!`
+        : 'This island is still locked.');
+      setTimeout(() => setLockedHint(''), 3000);
+      return;
+    }
+    setLockedHint('');
+    setSelectedIslandId(island.id);
   };
 
-  const openTopic = (topic) => navigate(`/study/${topic.id}`);
-  const progressPercent = Math.min(100, (progress.completed_topics.length / STUDY_TOPICS.length) * 100);
+  const startIsland = () => {
+    if (!selectedIsland) return;
+    const updated = setIslandIntroSeen(progress, selectedIsland.id);
+    setProgress(updated);
+    saveStudyProgress(updated);
+    setSelectedIslandId(null);
+    navigate(`/study/${selectedIsland.id}`);
+  };
 
-  // Whale sits above: the last-completed node, or above node 0 if nothing completed yet
-  const whaleNodeIdx = progress.completed_topics.length > 0
-    ? Math.min(progress.completed_topics.length - 1, STUDY_TOPICS.length - 1)
-    : 0;
+  const closeModal = () => setSelectedIslandId(null);
+  const xpPct = Math.min(100, stats.progressPercent ?? 0);
 
   return (
-    <div className="min-h-screen flex flex-col text-white"
-      style={{ background: 'linear-gradient(180deg, #0a1628 0%, #0d2b52 25%, #134477 50%, #1565c0 80%, #1976d2 100%)' }}>
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      fontFamily: "'Nunito', sans-serif",
+      background: 'radial-gradient(ellipse at 18% 0%, #0ea5e9 0%, #0369a1 30%, #082f49 65%, #041421 100%)',
+      overflowX: 'hidden',
+      position: 'relative',
+    }}>
 
-      {/* ── Header ── */}
-      <header style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '20px 28px', flexShrink: 0 }}>
-        <button onClick={() => navigate('/dashboard')}
+      {/* ── subtle star field ── */}
+      {[8,18,32,47,56,71,85,90,22,63].map((x, i) => (
+        <div key={i} style={{
+          position: 'absolute', left: `${x}%`, top: `${3 + (i * 7) % 22}%`,
+          width: i % 3 === 0 ? 3 : 2, height: i % 3 === 0 ? 3 : 2,
+          borderRadius: '50%', background: 'white',
+          opacity: 0.2 + (i * 0.05), pointerEvents: 'none',
+        }} />
+      ))}
+
+      {/* ── header ── */}
+      <header style={{
+        display: 'flex', alignItems: 'center', gap: 14,
+        padding: '18px 28px', flexShrink: 0, position: 'relative', zIndex: 2,
+      }}>
+        <button
+          onClick={() => navigate('/dashboard')}
           style={{
-            width: 46, height: 46, borderRadius: '50%', border: 'none', cursor: 'pointer',
-            background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', flexShrink: 0, transition: 'background 0.2s'
+            width: 48, height: 48, borderRadius: '50%',
+            border: '2px solid rgba(255,255,255,0.3)',
+            cursor: 'pointer', background: 'rgba(255,255,255,0.12)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0, transition: 'all 0.2s',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
           }}
-          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.22)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.25)'; e.currentTarget.style.transform = 'scale(1.08)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; e.currentTarget.style.transform = 'scale(1)'; }}
         >
-          <ArrowLeft size={22} color="white" />
+          <ArrowLeft size={20} color="white" />
         </button>
-        <h1 style={{ fontSize: 22, fontWeight: 900, color: 'white', flex: 1, margin: 0, whiteSpace: 'nowrap' }}>Deep Dive Study</h1>
+
+        <div style={{ flex: 1 }}>
+          <h1 style={{
+            fontSize: 24, fontWeight: 900, color: 'white', margin: 0,
+            textShadow: '0 2px 12px rgba(0,0,0,0.5)', letterSpacing: '-0.01em',
+          }}>
+            Study Voyage World
+          </h1>
+          <p style={{ margin: '3px 0 0', fontSize: 11, color: 'rgba(255,255,255,0.65)', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700 }}>
+            Explore islands · Learn signs · Defeat bosses
+          </p>
+        </div>
+
+        {/* Level + XP pill */}
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
-          background: 'rgba(255,255,255,0.12)', borderRadius: 50, padding: '10px 18px'
+          display: 'flex', alignItems: 'center', gap: 10,
+          background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(10px)',
+          border: '1.5px solid rgba(255,255,255,0.28)',
+          borderRadius: 50, padding: '10px 18px',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
         }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.9)', whiteSpace: 'nowrap' }}>Level {progress.level}</span>
-          <div style={{ width: 90, height: 8, borderRadius: 99, background: 'rgba(255,255,255,0.2)', overflow: 'hidden', flexShrink: 0 }}>
-            <div style={{ height: '100%', borderRadius: 99, background: '#00bfa5', width: `${progressPercent}%`, transition: 'width 0.7s' }} />
+          <Compass size={17} color="#fde68a" />
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 800, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Level</div>
+            <div style={{ fontSize: 15, fontWeight: 900, color: 'white', lineHeight: 1.1 }}>{stats.playerLevel}</div>
           </div>
+          <div style={{ width: 80, height: 8, borderRadius: 99, background: 'rgba(0,0,0,0.3)', overflow: 'hidden' }}>
+            <div style={{
+              height: '100%', borderRadius: 99,
+              background: 'linear-gradient(90deg,#34d399,#22d3ee)',
+              width: `${xpPct}%`, transition: 'width 0.8s ease',
+              boxShadow: '0 0 8px rgba(52,211,153,0.7)',
+            }} />
+          </div>
+          <span style={{ fontSize: 12, fontWeight: 900, color: '#fde68a', whiteSpace: 'nowrap' }}>{stats.xp} XP</span>
         </div>
       </header>
 
-      {/* ── Island / Lighthouse Illustration ── */}
-      <div className="relative flex justify-center items-end overflow-hidden flex-shrink-0" style={{ height: 190 }}>
-        {[[8,12],[18,8],[32,18],[52,6],[68,14],[82,10],[90,22],[45,25]].map(([x,y],i) => (
-          <div key={i} className="absolute rounded-full bg-white"
-            style={{ left:`${x}%`, top:`${y}%`, width: i%3===0?3:2, height: i%3===0?3:2, opacity: 0.3+i*0.05 }} />
-        ))}
-        <svg viewBox="0 0 320 170" width="300" height="160" fill="none" className="relative z-10">
-          <ellipse cx="160" cy="162" rx="155" ry="12" fill="#0d47a1" opacity="0.3"/>
-          <ellipse cx="160" cy="148" rx="90" ry="20" fill="#37474f"/>
-          <ellipse cx="160" cy="152" rx="100" ry="15" fill="#455a64" opacity="0.7"/>
-          <rect x="145" y="55" width="30" height="92" rx="3" fill="#eceff1"/>
-          <rect x="145" y="68" width="30" height="10" fill="#e53935"/>
-          <rect x="145" y="90" width="30" height="10" fill="#e53935"/>
-          <rect x="145" y="112" width="30" height="10" fill="#e53935"/>
-          <rect x="141" y="48" width="38" height="10" rx="2" fill="#78909c"/>
-          <rect x="149" y="37" width="22" height="13" rx="3" fill="#263238"/>
-          <polygon points="160,43 100,12 220,12" fill="#fff176" opacity="0.15"/>
-          <circle cx="160" cy="43" r="6" fill="#fff176" opacity="0.8"/>
-          <rect x="88" y="133" width="24" height="17" rx="2" fill="#607d8b"/>
-          <rect x="96" y="138" width="7" height="12" fill="#37474f"/>
-          <polygon points="85,133 115,133 100,120" fill="#546e7a"/>
-          <rect x="195" y="142" width="40" height="4" fill="#8d6e63"/>
-          <rect x="200" y="142" width="4" height="10" fill="#6d4c41"/>
-          <rect x="225" y="142" width="4" height="10" fill="#6d4c41"/>
-          <circle cx="80" cy="128" r="10" fill="#2e7d32" opacity="0.7"/>
-          <circle cx="72" cy="131" r="8" fill="#388e3c" opacity="0.6"/>
-          <rect x="78" y="128" width="3" height="11" fill="#5d4037"/>
-          <line x1="160" y1="37" x2="160" y2="26" stroke="#5d4037" strokeWidth="2"/>
-          <polygon points="160,26 174,31 160,36" fill="#ff7043"/>
+      {/* ── wave divider ── */}
+      <div style={{ width: '100%', flexShrink: 0, lineHeight: 0, position: 'relative', zIndex: 1 }}>
+        <svg viewBox="0 0 1440 48" preserveAspectRatio="none" style={{ display: 'block', width: '100%', height: 48 }}>
+          <path d="M0 32 C240 8,480 44,720 24 C960 4,1200 40,1440 20 L1440 48 L0 48Z" fill="rgba(255,255,255,0.05)" />
+          <path d="M0 40 C360 16,720 48,1080 28 C1260 18,1380 44,1440 32 L1440 48 L0 48Z" fill="rgba(255,255,255,0.04)" />
         </svg>
       </div>
 
-      {/* ── Topic Path ── */}
-      <div className="flex-1 flex items-center justify-center overflow-x-auto" style={{ padding: '8px 24px 24px' }}>
-        <div className="flex items-end" style={{ gap: 0 }}>
-          {STUDY_TOPICS.map((topic, idx) => {
-            const unlocked = isUnlocked(topic, idx);
-            const completed = progress.completed_topics.includes(topic.id);
-            const isCurrent = unlocked && !completed;
-            const showWhale = idx === whaleNodeIdx;
+      {/* ── island scroll area ── */}
+      <div style={{ flex: 1, overflowX: 'auto', padding: '16px 32px 24px', position: 'relative', zIndex: 2 }}>
+        <div style={{ minWidth: Math.max(1000, STUDY_ISLANDS.length * 210), maxWidth: 1400, margin: '0 auto', position: 'relative' }}>
 
-            return (
-              <div key={topic.id} className="flex items-end">
-                {/* Connector line */}
-                {idx > 0 && (
-                  <div style={{
-                    width: 48, height: 3, marginBottom: 34, borderRadius: 99,
-                    background: completed ? '#00bfa5' : 'rgba(255,255,255,0.18)'
-                  }} />
-                )}
+          {/* dashed connecting path */}
+          <div style={{
+            position: 'absolute', top: 152, left: 90, right: 90, height: 4,
+            borderRadius: 99, pointerEvents: 'none',
+            background: 'none',
+            borderTop: '4px dashed rgba(186,230,255,0.45)',
+          }} />
 
-                {/* Node column */}
-                <div className="flex flex-col items-center" style={{ minWidth: 88 }}>
-                  {/* Whale above its node */}
-                  {showWhale ? (
-                    <div style={{ animation: 'whale-bob 3s ease-in-out infinite', marginBottom: 4 }}>
-                      <WhaleSvg />
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${STUDY_ISLANDS.length}, minmax(170px, 1fr))`,
+            gap: 20,
+            alignItems: 'end',
+            position: 'relative',
+          }}>
+            {STUDY_ISLANDS.map((island, index) => {
+              const unlocked = isIslandUnlocked(progress, island.id);
+              const completed = isIslandCompleted(progress, island.id);
+              const isCurrent = activeIslandId === island.id;
+              const offsetY = index % 2 === 0 ? 0 : 44;
+              const diff = DIFF_META[island.difficulty] || DIFF_META.Easy;
+
+              return (
+                <div key={island.id} style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  transform: `translateY(${offsetY}px)`,
+                }}>
+                  {/* whale marker */}
+                  {isCurrent ? (
+                    <div style={{ animation: 'whale-bob 2.8s ease-in-out infinite', marginBottom: 6 }}>
+                      <img
+                        src="/whale.svg"
+                        alt="Current island"
+                        style={{ width: 76, height: 57, display: 'block', filter: 'drop-shadow(0 4px 14px rgba(0,200,255,0.6))' }}
+                      />
                     </div>
                   ) : (
-                    <div style={{ height: 62 }} />
+                    <div style={{ height: 63 }} />
                   )}
 
-                  {/* START badge */}
-                  {isCurrent && (
+                  {/* Active badge */}
+                  {isCurrent ? (
                     <span style={{
-                      background: '#00bfa5', color: 'white', fontSize: 10, fontWeight: 900,
-                      padding: '3px 12px', borderRadius: 99, letterSpacing: '0.15em',
-                      textTransform: 'uppercase', marginBottom: 6, display: 'block'
+                      background: 'linear-gradient(135deg,#34d399,#22d3ee)',
+                      color: '#083344', fontSize: 10, fontWeight: 900,
+                      padding: '3px 14px', borderRadius: 99, letterSpacing: '0.15em',
+                      textTransform: 'uppercase', marginBottom: 8, display: 'flex',
+                      alignItems: 'center', gap: 4,
+                      boxShadow: '0 4px 16px rgba(52,211,153,0.55)',
+                      animation: 'badge-pulse 2s ease-in-out infinite',
                     }}>
-                      Start
+                      <Zap size={9} fill="#083344" color="#083344" strokeWidth={3} />
+                      Active
                     </span>
+                  ) : (
+                    <div style={{ height: 24 }} />
                   )}
-                  {!isCurrent && <div style={{ height: 20 }} />}
 
-                  {/* Topic button */}
+                  {/* island card */}
                   <button
-                    onClick={() => unlocked && openTopic(topic)}
-                    disabled={!unlocked}
+                    onClick={() => openIslandIntro(island, index)}
                     style={{
-                      width: isCurrent ? 70 : 64, height: isCurrent ? 70 : 64,
-                      borderRadius: '50%', border: 'none', cursor: unlocked ? 'pointer' : 'not-allowed',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      boxShadow: '0 6px 24px rgba(0,0,0,0.22)', transition: 'all 0.15s',
-                      background: completed ? '#00bfa5' : isCurrent ? '#ffffff' : 'rgba(255,255,255,0.12)',
-                      opacity: !unlocked ? 0.4 : 1,
-                      outline: isCurrent ? '4px solid rgba(255,255,255,0.4)' : 'none',
+                      width: 140,
+                      borderRadius: 22,
+                      border: isCurrent
+                        ? '2.5px solid rgba(52,211,153,0.9)'
+                        : completed
+                        ? '2px solid rgba(34,211,238,0.6)'
+                        : '2px solid rgba(255,255,255,0.18)',
+                      cursor: unlocked ? 'pointer' : 'not-allowed',
+                      transition: 'transform 0.22s cubic-bezier(.4,0,.2,1), box-shadow 0.22s ease',
+                      background: unlocked
+                        ? 'rgba(8,26,60,0.75)'
+                        : 'rgba(255,255,255,0.06)',
+                      opacity: unlocked ? 1 : 0.52,
+                      padding: '10px 10px 14px',
+                      backdropFilter: 'blur(8px)',
+                      boxShadow: isCurrent
+                        ? '0 0 0 4px rgba(52,211,153,0.2), 0 16px 40px rgba(0,0,0,0.4)'
+                        : completed
+                        ? '0 12px 32px rgba(34,211,238,0.2)'
+                        : '0 8px 28px rgba(0,0,0,0.35)',
+                    }}
+                    onMouseEnter={e => {
+                      if (unlocked) {
+                        e.currentTarget.style.transform = 'translateY(-8px) scale(1.04)';
+                        e.currentTarget.style.boxShadow = '0 22px 52px rgba(0,0,0,0.5)';
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                      e.currentTarget.style.boxShadow = isCurrent
+                        ? '0 0 0 4px rgba(52,211,153,0.2), 0 16px 40px rgba(0,0,0,0.4)'
+                        : '0 8px 28px rgba(0,0,0,0.35)';
                     }}
                   >
-                    {completed && <CheckCircle2 size={26} color="white" />}
-                    {isCurrent && <Play size={24} fill="#1a73e8" color="#1a73e8" style={{ marginLeft: 3 }} />}
-                    {!unlocked && <Lock size={20} color="rgba(255,255,255,0.5)" />}
-                  </button>
+                    {/* island scene */}
+                    <div style={{
+                      height: 88, borderRadius: 16,
+                      background: island.theme.sky,
+                      position: 'relative', overflow: 'hidden',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {/* island mound */}
+                      <div style={{
+                        position: 'absolute', bottom: -10,
+                        width: '86%', height: 32, borderRadius: '50%',
+                        background: island.theme.island,
+                        boxShadow: `0 -3px 12px rgba(0,0,0,0.2)`,
+                      }} />
 
-                  {/* Label */}
-                  <span style={{
-                    fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.85)',
-                    textAlign: 'center', marginTop: 10, lineHeight: 1.3,
-                    maxWidth: 84, display: 'block'
-                  }}>
-                    {topic.title}
-                  </span>
+                      {/* island icon */}
+                      {(() => {
+                        const meta = ISLAND_ICONS[island.id];
+                        if (!meta) return null;
+                        const { Icon, color } = meta;
+                        return (
+                          <div style={{
+                            position: 'relative', zIndex: 1,
+                            width: 44, height: 44, borderRadius: '50%',
+                            background: 'rgba(255,255,255,0.22)',
+                            backdropFilter: 'blur(4px)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            boxShadow: `0 4px 14px rgba(0,0,0,0.25)`,
+                          }}>
+                            <Icon size={22} color={color} strokeWidth={2.2} />
+                          </div>
+                        );
+                      })()}
+
+                      {/* completed star badge */}
+                      {completed && (
+                        <div style={{
+                          position: 'absolute', top: 6, right: 6,
+                          width: 22, height: 22, borderRadius: '50%',
+                          background: 'linear-gradient(135deg,#fbbf24,#f59e0b)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          boxShadow: '0 2px 8px rgba(251,191,36,0.7)',
+                        }}>
+                          <Star size={12} fill="white" color="white" />
+                        </div>
+                      )}
+
+                      {/* lock overlay */}
+                      {!unlocked && (
+                        <div style={{
+                          position: 'absolute', inset: 0,
+                          background: 'rgba(4,16,38,0.55)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          borderRadius: 16,
+                        }}>
+                          <Lock size={24} color="rgba(255,255,255,0.8)" />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* difficulty chip */}
+                    <div style={{ marginTop: 10, display: 'flex', justifyContent: 'center' }}>
+                      <span style={{
+                        background: unlocked ? diff.bg : 'rgba(255,255,255,0.14)',
+                        color: unlocked ? diff.text : 'rgba(255,255,255,0.55)',
+                        fontSize: 9, fontWeight: 900, letterSpacing: '0.15em',
+                        textTransform: 'uppercase', padding: '3px 10px', borderRadius: 99,
+                        boxShadow: unlocked ? `0 2px 8px ${diff.shadow}` : 'none',
+                      }}>
+                        {island.difficulty}
+                      </span>
+                    </div>
+
+                    {/* title */}
+                    <div style={{
+                      marginTop: 7, fontSize: 14, fontWeight: 900,
+                      color: 'white', textShadow: '0 1px 6px rgba(0,0,0,0.55)',
+                      letterSpacing: '0.01em',
+                    }}>
+                      {island.title}
+                    </div>
+                  </button>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      <style>{`@keyframes whale-bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }`}</style>
+      {/* ── stats bar ── */}
+      <div style={{
+        margin: '0 24px 20px',
+        borderRadius: 18,
+        background: 'rgba(255,255,255,0.1)',
+        backdropFilter: 'blur(12px)',
+        border: '1.5px solid rgba(255,255,255,0.2)',
+        padding: '14px 22px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+        boxShadow: '0 8px 30px rgba(0,0,0,0.25)',
+        position: 'relative', zIndex: 2,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: '50%',
+            background: 'linear-gradient(135deg,#34d399,#22d3ee)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 4px 12px rgba(52,211,153,0.5)', flexShrink: 0,
+          }}>
+            <Zap size={15} fill="white" color="white" />
+          </div>
+          <span style={{ fontSize: 13, fontWeight: 800, color: 'white' }}>
+            {stats.completedIslands}/{stats.totalIslands} islands cleared
+          </span>
+          <span style={{ color: 'rgba(255,255,255,0.4)', fontWeight: 700, fontSize: 13 }}>·</span>
+          <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', fontWeight: 700 }}>
+            {stats.completedPhraseLevels}/{stats.totalPhraseLevels} phrase levels done
+          </span>
+        </div>
+        <div style={{
+          background: 'linear-gradient(135deg,#fbbf24,#f59e0b)',
+          color: '#451a03', fontSize: 13, fontWeight: 900,
+          padding: '6px 16px', borderRadius: 99,
+          boxShadow: '0 4px 14px rgba(251,191,36,0.5)',
+          display: 'flex', alignItems: 'center', gap: 5,
+        }}>
+          <Star size={13} fill="#451a03" color="#451a03" />
+          {stats.xp} XP
+        </div>
+      </div>
+
+      {/* ── locked toast ── */}
+      {lockedHint && (
+        <div style={{
+          position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 100,
+          background: 'rgba(239,68,68,0.95)', backdropFilter: 'blur(8px)',
+          border: '1.5px solid rgba(255,180,180,0.5)',
+          color: 'white', borderRadius: 14,
+          padding: '12px 22px', fontSize: 14, fontWeight: 800,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
+          animation: 'slide-up 0.3s ease-out',
+          display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap',
+        }}>
+          <Lock size={15} color="white" />
+          {lockedHint}
+        </div>
+      )}
+
+      {/* ── island intro modal ── */}
+      {selectedIsland && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 60,
+            background: 'rgba(2,8,26,0.85)', backdropFilter: 'blur(10px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+          }}
+          onClick={e => { if (e.target === e.currentTarget) closeModal(); }}
+        >
+          <div style={{
+            width: 'min(520px, 100%)',
+            borderRadius: 26,
+            background: 'linear-gradient(165deg,#0c2a5c 0%,#071830 100%)',
+            border: '1.5px solid rgba(186,230,255,0.28)',
+            boxShadow: '0 28px 80px rgba(0,0,0,0.65)',
+            padding: 26, color: 'white',
+            animation: 'modal-enter 0.3s ease-out',
+          }}>
+            {/* modal header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
+              <div style={{
+                width: 60, height: 60, borderRadius: 17, flexShrink: 0,
+                background: selectedIsland.theme.sky,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 6px 20px rgba(0,0,0,0.35)', overflow: 'hidden',
+              }}>
+                <span style={{ fontSize: 28, lineHeight: 1, filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.3))' }}>
+                  {(() => {
+                    const meta = ISLAND_ICONS[selectedIsland.id];
+                    if (!meta) return selectedIsland.icon;
+                    const { Icon, color } = meta;
+                    return <Icon size={26} color={color} strokeWidth={2.2} />;
+                  })()}
+                </span>
+              </div>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 22, fontWeight: 900, letterSpacing: '-0.01em' }}>
+                  {selectedIsland.intro.title}
+                </h2>
+                <div style={{ marginTop: 5 }}>
+                  <span style={{
+                    display: 'inline-block',
+                    background: DIFF_META[selectedIsland.difficulty]?.bg || 'rgba(255,255,255,0.2)',
+                    color: DIFF_META[selectedIsland.difficulty]?.text || 'white',
+                    fontSize: 9.5, fontWeight: 900, letterSpacing: '0.15em',
+                    textTransform: 'uppercase', padding: '3px 12px', borderRadius: 99,
+                  }}>
+                    {selectedIsland.difficulty}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* story intro */}
+            <div style={{
+              background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 14, padding: '12px 16px', marginBottom: 12,
+              fontSize: 13, color: 'rgba(255,255,255,0.82)', lineHeight: 1.7, fontStyle: 'italic',
+            }}>
+              {selectedIsland.intro.story || selectedIsland.intro.description}
+            </div>
+
+            <p style={{ margin: '0 0 14px', color: 'rgba(255,255,255,0.72)', lineHeight: 1.6, fontSize: 13 }}>
+              {selectedIsland.intro.description}
+            </p>
+
+            <div style={{
+              background: 'rgba(52,211,153,0.1)', border: '1.5px solid rgba(52,211,153,0.3)',
+              borderRadius: 15, padding: '12px 16px', marginBottom: 12,
+              display: 'flex', gap: 10, alignItems: 'flex-start',
+            }}>
+              <Target size={15} color="#34d399" style={{ flexShrink: 0, marginTop: 1 }} />
+              <p style={{ margin: 0, fontSize: 13, color: '#a7f3d0', lineHeight: 1.6 }}>
+                <strong>Objective:</strong> {selectedIsland.intro.objective}
+              </p>
+            </div>
+
+            <div style={{
+              background: 'rgba(251,191,36,0.08)', border: '1.5px solid rgba(251,191,36,0.3)',
+              borderRadius: 15, padding: '12px 16px', marginBottom: 22,
+              display: 'flex', gap: 10, alignItems: 'flex-start',
+            }}>
+              <Lightbulb size={15} color="#fbbf24" style={{ flexShrink: 0, marginTop: 1 }} />
+              <p style={{ margin: 0, fontSize: 13, color: '#fde68a', lineHeight: 1.6 }}>
+                <strong>Tip:</strong> {selectedIsland.intro.hint}
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button
+                onClick={closeModal}
+                style={{
+                  border: '1.5px solid rgba(255,255,255,0.25)',
+                  background: 'rgba(255,255,255,0.08)', color: 'white', borderRadius: 13,
+                  padding: '11px 20px', fontWeight: 800, cursor: 'pointer',
+                  fontSize: 14, fontFamily: "'Nunito',sans-serif",
+                  transition: 'background 0.2s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.18)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+              >
+                Not yet
+              </button>
+              <button
+                onClick={startIsland}
+                style={{
+                  border: 'none',
+                  background: 'linear-gradient(135deg,#34d399,#22d3ee)',
+                  color: '#064e3b', borderRadius: 13,
+                  padding: '11px 22px', fontWeight: 900, cursor: 'pointer',
+                  fontSize: 14, fontFamily: "'Nunito',sans-serif",
+                  boxShadow: '0 6px 22px rgba(52,211,153,0.5)',
+                  transition: 'transform 0.18s ease, box-shadow 0.18s ease',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 30px rgba(52,211,153,0.65)'; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 6px 22px rgba(52,211,153,0.5)'; }}
+              >
+                Start Island
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes whale-bob { 0%,100%{transform:translateY(0) rotate(-1.5deg)} 50%{transform:translateY(-11px) rotate(1.5deg)} }
+        @keyframes badge-pulse { 0%,100%{box-shadow:0 4px 16px rgba(52,211,153,0.55)} 50%{box-shadow:0 4px 26px rgba(52,211,153,0.9)} }
+        @keyframes slide-up { 0%{opacity:0;transform:translateX(-50%) translateY(14px)} 100%{opacity:1;transform:translateX(-50%) translateY(0)} }
+        @keyframes modal-enter { 0%{opacity:0;transform:scale(0.92) translateY(16px)} 100%{opacity:1;transform:scale(1) translateY(0)} }
+      `}</style>
     </div>
   );
 }

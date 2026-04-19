@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
 
 /* ── CSS Reset & Variables ─────────────────────────────────────── */
 :root {
@@ -41,7 +42,7 @@
   --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.12);
   --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.18);
 
-  --font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Rounded, sans-serif;
 }
 
 * {
