@@ -4,7 +4,6 @@ import { X, Circle, ArrowRight, CheckCircle, Crown, Lock, Star, Lightbulb } from
 import Camera from '../../components/Camera';
 import { postJson } from '../../lib/api';
 import {
-  getIslandById,
   getInitialStudyProgress,
   getStoredStudyProgress,
   loadStudyProgress,
@@ -15,6 +14,7 @@ import {
   completeIslandLevel,
   buildBossChallenge,
 } from './studyVoyage';
+import { useIslands } from '../../contexts/IslandsContext';
 
 const LETTER_CAPTURE_INTERVAL_MS = 450;
 const WORD_CAPTURE_INTERVAL_MS = 250;
@@ -29,6 +29,7 @@ const WORD_THRESHOLD = 0.48;
 export default function StudySession() {
   const { islandId, levelId } = useParams();
   const navigate = useNavigate();
+  const { getIslandById } = useIslands();
   const [recording, setRecording] = useState(false);
   const [progress, setProgress] = useState(getInitialStudyProgress());
   const [showSuccess, setShowSuccess] = useState(false);

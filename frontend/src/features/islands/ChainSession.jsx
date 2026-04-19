@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   X, Circle, CheckCircle2, AlertCircle, ArrowRight, MessageCircle,
   Trophy, Lightbulb, ChevronDown,
 } from 'lucide-react';
 import Camera from '../../components/Camera';
-import { getIslandById } from '../study/studyVoyage';
+import { useIslands } from '../../contexts/IslandsContext';
 import { listIslandChains, startChainSession, submitChainTurn } from './conversationApi';
 
 const CAPTURE_INTERVAL_MS = 250;
@@ -33,7 +33,8 @@ const getUserId = () => {
 export default function ChainSession() {
   const navigate = useNavigate();
   const { islandId } = useParams();
-  const island = useMemo(() => getIslandById(islandId), [islandId]);
+  const { getIslandById } = useIslands();
+  const island = getIslandById(islandId);
 
   // Chain selection state
   const [chains, setChains] = useState([]);

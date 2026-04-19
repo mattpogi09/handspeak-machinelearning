@@ -3,20 +3,22 @@ from data.asl_data import (
     ALL_PRACTICE_SIGNS, VOCABULARY_BY_ID,
     ALL_PRACTICE_LETTERS, ALPHABET_BY_ID
 )
+from services.supabase_store import get_store
 
 router = APIRouter(prefix="/api/practice", tags=["practice"])
+store = get_store()
 
 
 @router.get("/alphabet")
 def get_alphabet():
     """Get all ASL alphabet letters for practice."""
-    return ALL_PRACTICE_LETTERS
+    return store.get_practice_signs("alphabet")
 
 
 @router.get("/numbers")
 def get_numbers():
-    """Get numbers (not yet implemented)."""
-    return []
+    """Get all ASL numbers for practice."""
+    return store.get_practice_signs("number")
 
 
 @router.get("/all")

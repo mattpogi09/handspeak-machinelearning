@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Settings, BookOpen, Trophy, Star, TrendingUp, Award, MessageCircle, ArrowRight, Target } from 'lucide-react';
-import { getStoredStudyProgress, getVoyageStats, STUDY_ISLANDS, loadStudyProgress, getCurrentIslandId, getIslandById } from '../study/studyVoyage';
+import { getStoredStudyProgress, getVoyageStats, loadStudyProgress, getCurrentIslandId } from '../study/studyVoyage';
+import { useIslands } from '../../contexts/IslandsContext';
 
 /* ── floating particle ── */
 const Particle = ({ x, y, size, delay, opacity }) => (
@@ -16,6 +17,7 @@ const Particle = ({ x, y, size, delay, opacity }) => (
 
 export default function Dashboard({ user }) {
   const navigate = useNavigate();
+  const { islands, getIslandById } = useIslands();
   const profile = user || JSON.parse(localStorage.getItem('handspeak_user') || '{}');
   const displayName = profile.nickname || profile.first_name || profile.email?.split('@')[0] || 'Captain';
   const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(' ') || displayName;
@@ -246,7 +248,7 @@ export default function Dashboard({ user }) {
               <span style={{ fontSize:14, fontWeight:800, color:'white' }}>Your Journey</span>
             </div>
             <div style={{ height:32, width:1, background:'rgba(255,255,255,0.15)' }} />
-            {STUDY_ISLANDS.slice(0,stats.completedIslands).map(island => (
+            {islands.slice(0,stats.completedIslands).map(island => (
               <div key={island.id} style={{ display:'flex', alignItems:'center', gap:5, background:'rgba(52,211,153,0.15)', border:'1px solid rgba(52,211,153,0.4)', borderRadius:99, padding:'4px 12px' }}>
                 <Star size={11} fill="#34d399" color="#34d399" />
                 <span style={{ fontSize:12, fontWeight:800, color:'#34d399' }}>{island.title}</span>

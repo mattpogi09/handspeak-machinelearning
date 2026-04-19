@@ -137,6 +137,19 @@ class SupabaseStore:
             CREATE INDEX IF NOT EXISTS conversation_attempts_session_idx
                 ON conversation_attempts(session_id);
 
+            CREATE TABLE IF NOT EXISTS practice_signs (
+                kind TEXT NOT NULL,
+                sign_id TEXT NOT NULL,
+                order_index INT NOT NULL,
+                payload JSONB NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (kind, sign_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS practice_signs_kind_order_idx
+                ON practice_signs(kind, order_index);
+
             -- Phase 2: response type columns (idempotent)
             ALTER TABLE conversation_attempts
                 ADD COLUMN IF NOT EXISTS response_type_expected TEXT;
@@ -169,6 +182,7 @@ class SupabaseStore:
             with self._connect() as connection:
                 with connection.cursor() as cursor:
                     cursor.execute(schema_sql)
+                    self._seed_practice_signs(cursor)
                 connection.commit()
 
             self._schema_ready = True
@@ -183,12 +197,66 @@ class SupabaseStore:
                 connection.commit()
                 return row
 
+    def _fetchall(self, query: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
+        self.ensure_schema()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(query, params)
+                rows = cursor.fetchall()
+                connection.commit()
+                return rows
+
     def _execute(self, query: str, params: tuple[Any, ...] = ()) -> None:
         self.ensure_schema()
         with self._connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(query, params)
                 connection.commit()
+
+    def _seed_practice_signs(self, cursor) -> None:
+        from data.asl_data import ALL_PRACTICE_LETTERS
+
+        number_payloads = [
+            {
+                "kind": "number",
+                "sign_id": str(value),
+                "order_index": value,
+                "payload": {
+                    "id": str(value),
+                    "label": str(value),
+                    "type": "number",
+                    "description": f"Form the number '{value}' with your hand.",
+                    "tip": "Keep your hand steady and clearly visible.",
+                    "diagramUrl": None,
+                },
+            }
+            for value in range(10)
+        ]
+        alphabet_payloads = [
+            {
+                "kind": "alphabet",
+                "sign_id": entry["id"],
+                "order_index": int(entry.get("order", index + 1)),
+                "payload": {
+                    **entry,
+                    "type": "alphabet",
+                },
+            }
+            for index, entry in enumerate(ALL_PRACTICE_LETTERS)
+        ]
+
+        for row in alphabet_payloads + number_payloads:
+            cursor.execute(
+                """
+                INSERT INTO practice_signs (kind, sign_id, order_index, payload, updated_at)
+                VALUES (%s, %s, %s, %s, NOW())
+                ON CONFLICT (kind, sign_id)
+                DO UPDATE SET order_index = EXCLUDED.order_index,
+                              payload = EXCLUDED.payload,
+                              updated_at = NOW()
+                """,
+                (row["kind"], row["sign_id"], row["order_index"], Json(row["payload"])),
+            )
 
     @staticmethod
     def _format_user(row: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -297,6 +365,18 @@ class SupabaseStore:
         """
         row = self._fetchone(query, (user_id, Json(progress)))
         return row["progress"] if row else progress
+
+    def get_practice_signs(self, kind: str) -> list[dict[str, Any]]:
+        rows = self._fetchall(
+            """
+            SELECT payload
+            FROM practice_signs
+            WHERE kind = %s
+            ORDER BY order_index ASC, sign_id ASC
+            """,
+            (kind,),
+        )
+        return [dict(row["payload"]) for row in rows]
 
     # ── Conversation sessions (Phase 1 Reply Quest) ──────────────────────
     def create_conversation_session(

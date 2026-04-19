@@ -1,8 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { X, Circle, ChevronLeft, ChevronRight, Lightbulb } from 'lucide-react';
-import { ALPHABET, NUMBERS } from '../../data/aslData';
 import Camera from '../../components/Camera';
+import { loadPracticeSigns } from './practiceApi';
 
 const ASL_IMG_BASE = 'https://www.lifeprint.com/asl101/fingerspelling/abc-gifs';
 
@@ -11,10 +11,41 @@ export default function PracticeSession() {
   const navigate = useNavigate();
   const [recording, setRecording] = useState(false);
   const [imgOk, setImgOk] = useState(true);
+  const [alphabet, setAlphabet] = useState([]);
+  const [numbers, setNumbers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const signs = type === 'alphabet' ? ALPHABET : NUMBERS;
+  useEffect(() => {
+    let active = true;
+
+    loadPracticeSigns()
+      .then(({ alphabet: alphabetSigns, numbers: numberSigns }) => {
+        if (!active) return;
+        setAlphabet(alphabetSigns);
+        setNumbers(numberSigns);
+        setError('');
+      })
+      .catch((fetchError) => {
+        if (active) setError(fetchError.message || 'Unable to load practice signs');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const signs = useMemo(() => {
+    if (type === 'alphabet') return alphabet;
+    if (type === 'number') return numbers;
+    return [];
+  }, [type, alphabet, numbers]);
   const currentIndex = signs.findIndex((s) => s.id === signId);
-  const currentSign = signs[currentIndex] || signs[0];
+  const resolvedIndex = currentIndex >= 0 ? currentIndex : 0;
+  const currentSign = signs[resolvedIndex] || null;
 
   const goTo = useCallback((idx) => {
     setImgOk(true);
@@ -27,6 +58,28 @@ export default function PracticeSession() {
   const imgSrc = type === 'alphabet'
     ? `${ASL_IMG_BASE}/${currentSign.label.toLowerCase()}.gif`
     : null; // numbers use fallback
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#041524', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        Loading practice sign...
+      </div>
+    );
+  }
+
+  if (error || !currentSign) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#041524', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ textAlign: 'center', maxWidth: 420 }}>
+          <p style={{ fontSize: 20, fontWeight: 900, margin: '0 0 12px' }}>{error || 'Practice sign not found.'}</p>
+          <button onClick={handleClose}
+            style={{ border: 'none', borderRadius: 14, padding: '12px 20px', cursor: 'pointer', fontWeight: 900, fontSize: 15, background: 'linear-gradient(135deg,#34d399,#22d3ee)', color: '#064e3b', fontFamily: "'Nunito',sans-serif" }}>
+            Back to Practice
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -86,19 +139,19 @@ export default function PracticeSession() {
           {/* prev / next nav on camera */}
           <div style={{ position: 'absolute', bottom: 28, left: 0, right: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16 }}>
             <button
-              onClick={() => goTo(currentIndex - 1)}
-              disabled={currentIndex <= 0}
+              onClick={() => goTo(resolvedIndex - 1)}
+              disabled={resolvedIndex <= 0}
               style={{
                 width: 44, height: 44, borderRadius: '50%',
-                background: currentIndex <= 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)',
+                background: resolvedIndex <= 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)',
                 border: '2px solid rgba(255,255,255,0.3)',
-                cursor: currentIndex <= 0 ? 'not-allowed' : 'pointer',
+                cursor: resolvedIndex <= 0 ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                opacity: currentIndex <= 0 ? 0.45 : 1,
+                opacity: resolvedIndex <= 0 ? 0.45 : 1,
                 transition: 'all 0.2s',
               }}
-              onMouseEnter={e => { if (currentIndex > 0) e.currentTarget.style.background = 'rgba(255,255,255,0.35)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = currentIndex <= 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)'; }}
+              onMouseEnter={e => { if (resolvedIndex > 0) e.currentTarget.style.background = 'rgba(255,255,255,0.35)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = resolvedIndex <= 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)'; }}
             >
               <ChevronLeft size={20} color="white" />
             </button>
@@ -117,19 +170,19 @@ export default function PracticeSession() {
             </button>
 
             <button
-              onClick={() => goTo(currentIndex + 1)}
-              disabled={currentIndex >= signs.length - 1}
+              onClick={() => goTo(resolvedIndex + 1)}
+              disabled={resolvedIndex >= signs.length - 1}
               style={{
                 width: 44, height: 44, borderRadius: '50%',
-                background: currentIndex >= signs.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)',
+                background: resolvedIndex >= signs.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)',
                 border: '2px solid rgba(255,255,255,0.3)',
-                cursor: currentIndex >= signs.length - 1 ? 'not-allowed' : 'pointer',
+                cursor: resolvedIndex >= signs.length - 1 ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                opacity: currentIndex >= signs.length - 1 ? 0.45 : 1,
+                opacity: resolvedIndex >= signs.length - 1 ? 0.45 : 1,
                 transition: 'all 0.2s',
               }}
-              onMouseEnter={e => { if (currentIndex < signs.length - 1) e.currentTarget.style.background = 'rgba(255,255,255,0.35)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = currentIndex >= signs.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)'; }}
+              onMouseEnter={e => { if (resolvedIndex < signs.length - 1) e.currentTarget.style.background = 'rgba(255,255,255,0.35)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = resolvedIndex >= signs.length - 1 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)'; }}
             >
               <ChevronRight size={20} color="white" />
             </button>
@@ -151,7 +204,7 @@ export default function PracticeSession() {
               Practice Target
             </span>
             <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', fontWeight: 700 }}>
-              {currentIndex + 1} / {signs.length}
+              {resolvedIndex + 1} / {signs.length}
             </span>
           </div>
 

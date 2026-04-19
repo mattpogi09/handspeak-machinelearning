@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Hand } from 'lucide-react';
-import { ALPHABET, NUMBERS } from '../../data/aslData';
+import { ArrowLeft, Hand, RefreshCw } from 'lucide-react';
+import { loadPracticeSigns } from './practiceApi';
 
 /*
   ASL fingerspelling images from a reliable public CDN.
@@ -88,6 +88,34 @@ function SignCard({ sign, onClick, accent }) {
 
 export default function Practice() {
   const navigate = useNavigate();
+  const [alphabet, setAlphabet] = useState([]);
+  const [numbers, setNumbers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+
+    loadPracticeSigns()
+      .then(({ alphabet: alphabetSigns, numbers: numberSigns }) => {
+        if (!active) return;
+        setAlphabet(alphabetSigns);
+        setNumbers(numberSigns);
+        setError('');
+      })
+      .catch((fetchError) => {
+        if (active) setError(fetchError.message || 'Failed to load practice signs');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const allSigns = useMemo(() => [...alphabet, ...numbers], [alphabet, numbers]);
   const openSign = (sign) => navigate(`/practice/${sign.type}/${sign.id}`);
 
   return (
@@ -140,56 +168,62 @@ export default function Practice() {
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.12)', border: '1.5px solid rgba(255,255,255,0.25)', borderRadius: 99, padding: '7px 16px' }}>
           <Hand size={14} color="rgba(255,255,255,0.8)" />
-          <span style={{ fontSize: 12, fontWeight: 900, color: 'rgba(255,255,255,0.9)' }}>{ALPHABET.length + NUMBERS.length} signs</span>
+          <span style={{ fontSize: 12, fontWeight: 900, color: 'rgba(255,255,255,0.9)' }}>{allSigns.length || '--'} signs</span>
         </div>
       </header>
 
       {/* ── Content ── */}
       <main style={{ flex: 1, padding: '32px 36px 48px', position: 'relative', zIndex: 2 }}>
-
-        {/* ── Alphabet Section ── */}
-        <section style={{ marginBottom: 44 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 22 }}>
-            <div style={{
-              height: 1, flex: 1,
-              background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.25))',
-            }} />
-            <h2 style={{
-              fontSize: 12, fontWeight: 900, color: 'rgba(255,255,255,0.7)',
-              textTransform: 'uppercase', letterSpacing: '0.24em', margin: 0,
-              whiteSpace: 'nowrap',
-            }}>
-              Alphabet  ·  A – Z
-            </h2>
-            <div style={{
-              height: 1, flex: 1,
-              background: 'linear-gradient(90deg, rgba(255,255,255,0.25), transparent)',
-            }} />
+        {loading ? (
+          <div style={{ minHeight: 260, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 900 }}>
+            Loading practice signs...
           </div>
-
-          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 14 }}>
-            {ALPHABET.map((sign) => (
-              <SignCard key={sign.id} sign={sign} onClick={openSign} accent="#fb923c" />
-            ))}
+        ) : error ? (
+          <div style={{ minHeight: 260, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fecaca', fontWeight: 900, textAlign: 'center' }}>
+            <div>
+              <p style={{ margin: '0 0 12px' }}>{error}</p>
+              <button onClick={() => window.location.reload()} style={{ border: 'none', borderRadius: 14, padding: '12px 18px', cursor: 'pointer', background: 'rgba(255,255,255,0.12)', color: 'white', fontWeight: 900, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <RefreshCw size={14} /> Retry
+              </button>
+            </div>
           </div>
-        </section>
+        ) : (
+          <>
+            {/* ── Alphabet Section ── */}
+            <section style={{ marginBottom: 44 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 22 }}>
+                <div style={{ height: 1, flex: 1, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.25))' }} />
+                <h2 style={{ fontSize: 12, fontWeight: 900, color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: '0.24em', margin: 0, whiteSpace: 'nowrap' }}>
+                  Alphabet  ·  A – Z
+                </h2>
+                <div style={{ height: 1, flex: 1, background: 'linear-gradient(90deg, rgba(255,255,255,0.25), transparent)' }} />
+              </div>
 
-        {/* ── Numbers Section ── */}
-        <section>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 22 }}>
-            <div style={{ height: 1, flex: 1, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.25))' }} />
-            <h2 style={{ fontSize: 12, fontWeight: 900, color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: '0.24em', margin: 0, whiteSpace: 'nowrap' }}>
-              Numbers  ·  0 – 9
-            </h2>
-            <div style={{ height: 1, flex: 1, background: 'linear-gradient(90deg, rgba(255,255,255,0.25), transparent)' }} />
-          </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 14 }}>
+                {alphabet.map((sign) => (
+                  <SignCard key={sign.id} sign={sign} onClick={openSign} accent="#fb923c" />
+                ))}
+              </div>
+            </section>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 14 }}>
-            {NUMBERS.map((sign) => (
-              <SignCard key={sign.id} sign={sign} onClick={openSign} accent="#60a5fa" />
-            ))}
-          </div>
-        </section>
+            {/* ── Numbers Section ── */}
+            <section>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 22 }}>
+                <div style={{ height: 1, flex: 1, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.25))' }} />
+                <h2 style={{ fontSize: 12, fontWeight: 900, color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: '0.24em', margin: 0, whiteSpace: 'nowrap' }}>
+                  Numbers  ·  0 – 9
+                </h2>
+                <div style={{ height: 1, flex: 1, background: 'linear-gradient(90deg, rgba(255,255,255,0.25), transparent)' }} />
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 14 }}>
+                {numbers.map((sign) => (
+                  <SignCard key={sign.id} sign={sign} onClick={openSign} accent="#60a5fa" />
+                ))}
+              </div>
+            </section>
+          </>
+        )}
       </main>
 
       {/* ── bottom wave ── */}

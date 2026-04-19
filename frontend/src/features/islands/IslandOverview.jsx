@@ -1,19 +1,18 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, BookOpen, Target, MessageCircle, Lightbulb, Star, Lock } from 'lucide-react';
 import {
-  getIslandById,
   getIslandProgress,
   getStoredStudyProgress,
   loadStudyProgress,
   isIslandUnlocked,
 } from '../study/studyVoyage';
-
-const CONVERSATION_ISLAND_IDS = new Set(['greetings']);
+import { useIslands } from '../../contexts/IslandsContext';
 
 export default function IslandOverview() {
   const navigate = useNavigate();
   const { islandId } = useParams();
+  const { getIslandById } = useIslands();
   const [progress, setProgress] = useState(() => getStoredStudyProgress());
   const [conversationStats, setConversationStats] = useState(null);
 
@@ -28,7 +27,7 @@ export default function IslandOverview() {
     return () => { active = false; };
   }, [islandId]);
 
-  const island = useMemo(() => getIslandById(islandId), [islandId]);
+  const island = getIslandById(islandId);
 
   if (!island) {
     return (
@@ -46,8 +45,6 @@ export default function IslandOverview() {
 
   const islandProgress = getIslandProgress(progress, islandId);
   const unlocked = isIslandUnlocked(progress, islandId);
-  const hasConverse = CONVERSATION_ISLAND_IDS.has(islandId);
-  const isAlphabet = island.type === 'alphabet';
 
   return (
     <div style={{
@@ -84,7 +81,7 @@ export default function IslandOverview() {
             </div>
             <div>
               <div style={{ fontSize: 11, fontWeight: 900, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.18em', textTransform: 'uppercase' }}>
-                {isAlphabet ? 'Foundations' : 'Conversation Island'} · {island.difficulty}
+                {island.type === 'alphabet' ? 'Foundations' : island.type === 'conversation' ? 'Conversation Island' : 'Vocabulary Island'} · {island.difficulty}
               </div>
               <h1 style={{ margin: '4px 0 0', fontSize: 28, fontWeight: 900 }}>{island.intro?.title || island.title}</h1>
             </div>
@@ -116,46 +113,56 @@ export default function IslandOverview() {
         {/* Mode cards */}
         <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
           <ModeCard
-            icon={<BookOpen size={22} color="#60a5fa" />}
-            accent="#60a5fa"
+            icon={<BookOpen size={22} color={island.hasLearn ? '#60a5fa' : 'rgba(255,255,255,0.35)'} />}
+            accent={island.hasLearn ? '#60a5fa' : 'rgba(255,255,255,0.35)'}
             label="Learn"
-            description="Walk through each sign in this island, one at a time, with the camera coach."
-            progress={`${islandProgress.completedLevelIds.length}/${island.levels.length} levels`}
-            disabled={!unlocked}
-            onClick={() => navigate(`/study/${islandId}`)}
+            description={
+              island.hasLearn
+                ? 'Walk through each sign in this island, one at a time, with the camera coach.'
+                : 'Learn mode is not available for this island.'
+            }
+            progress={
+              island.hasLearn
+                ? `${islandProgress.completedLevelIds.length}/${island.levels.length} levels`
+                : 'Not available'
+            }
+            disabled={!unlocked || !island.hasLearn}
+            onClick={() => island.hasLearn && navigate(`/study/${islandId}`)}
           />
 
-          {!isAlphabet && (
-            <ModeCard
-              icon={<Target size={22} color="#fbbf24" />}
-              accent="#fbbf24"
-              label="Drill"
-              description="Rapid recall across the full 100-word set. Keeps your signs sharp."
-              progress="Open practice"
-              disabled={!unlocked}
-              onClick={() => navigate('/practice')}
-            />
-          )}
+          <ModeCard
+            icon={<Target size={22} color={island.hasDrill ? '#fbbf24' : 'rgba(255,255,255,0.35)'} />}
+            accent={island.hasDrill ? '#fbbf24' : 'rgba(255,255,255,0.35)'}
+            label="Drill"
+            description={
+              island.hasDrill
+                ? 'Rapid recall across the full 100-word set. Keeps your signs sharp.'
+                : 'Drill mode is not available for this island.'
+            }
+            progress={island.hasDrill ? 'Open practice' : 'Not available'}
+            disabled={!unlocked || !island.hasDrill}
+            onClick={() => island.hasDrill && navigate('/practice')}
+          />
 
           <ModeCard
-            icon={<MessageCircle size={22} color={hasConverse ? '#34d399' : 'rgba(255,255,255,0.45)'} />}
-            accent={hasConverse ? '#34d399' : 'rgba(255,255,255,0.35)'}
+            icon={<MessageCircle size={22} color={island.hasConverse ? '#34d399' : 'rgba(255,255,255,0.45)'} />}
+            accent={island.hasConverse ? '#34d399' : 'rgba(255,255,255,0.35)'}
             label="Converse"
             description={
-              hasConverse
+              island.hasConverse
                 ? 'Reply to NPC prompts in real conversations. This is where signing becomes a skill.'
                 : 'Reply Quest unlocks on this island in a future phase.'
             }
             progress={
-              hasConverse
+              island.hasConverse
                 ? conversationStats
                   ? `${conversationStats.prompts_correct || 0} prompts correct · ${conversationStats.sessions_completed || 0} sessions`
-                  : 'New for Phase 1'
+                  : 'Ready to start'
                 : 'Coming soon'
             }
-            disabled={!unlocked || !hasConverse}
-            highlight={hasConverse && unlocked}
-            onClick={() => navigate(`/islands/${islandId}/converse`)}
+            disabled={!unlocked || !island.hasConverse}
+            highlight={island.hasConverse && unlocked}
+            onClick={() => island.hasConverse && navigate(`/islands/${islandId}/converse`)}
           />
         </div>
       </div>
@@ -197,7 +204,7 @@ function ModeCard({ icon, label, description, progress, accent, onClick, disable
         </div>
         {highlight && (
           <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 99, background: 'rgba(52,211,153,0.22)', color: '#6ee7b7', fontSize: 10, fontWeight: 900, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-            <Star size={10} /> New
+            <Star size={10} /> Active
           </span>
         )}
       </div>

@@ -4,7 +4,8 @@ import {
   ArrowLeft, User, Star, Trophy, Zap, RotateCcw, LogOut,
   BookOpen, Shield, TrendingUp, Award, Info, ChevronRight,
 } from 'lucide-react';
-import { getStoredStudyProgress, getVoyageStats, STUDY_ISLANDS, loadStudyProgress, resetStudyProgress } from '../study/studyVoyage';
+import { getStoredStudyProgress, getVoyageStats, loadStudyProgress, resetStudyProgress } from '../study/studyVoyage';
+import { useIslands } from '../../contexts/IslandsContext';
 
 const ISLAND_COLORS = {
   greetings: '#22d3ee',
@@ -60,6 +61,7 @@ function Row({ label, value, accent, last }) {
 
 export default function Settings({ user, onLogout }) {
   const navigate = useNavigate();
+  const { islands } = useIslands();
   const [profile, setProfile] = useState({});
   const [progress, setProgress] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -224,7 +226,7 @@ export default function Settings({ user, onLogout }) {
             <Card>
               <CardHeader icon={<Trophy size={16} color="#fbbf24" />} label="Island Status" />
               <div style={{ padding: '10px 16px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {STUDY_ISLANDS.map((island) => {
+                {islands.map((island) => {
                   const ip = progress?.islands?.[island.id];
                   const done = ip?.bossCompleted;
                   const pct = ip ? Math.round((ip.completedLevelIds.length / Math.max(island.levels.length, 1)) * 100) : 0;

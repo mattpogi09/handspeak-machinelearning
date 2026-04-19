@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2, Crown, Lock, Play, Star, Zap, Target, Hand, Users, Palette, Utensils, PawPrint } from 'lucide-react';
 import {
-  getIslandById,
   getInitialStudyProgress,
   getStoredStudyProgress,
   loadStudyProgress,
@@ -12,6 +11,7 @@ import {
   isBossUnlocked,
   getIslandProgress,
 } from './studyVoyage';
+import { useIslands } from '../../contexts/IslandsContext';
 
 const DIFF_META = {
   Easy:   { label: 'Easy',   bg: 'linear-gradient(135deg,#22d3ee,#06b6d4)', text: '#083344', shadow: 'rgba(6,182,212,0.55)' },
@@ -30,6 +30,7 @@ const ISLAND_ICONS = {
 export default function StudyIsland() {
   const { islandId } = useParams();
   const navigate = useNavigate();
+  const { getIslandById } = useIslands();
   const [progress, setProgress] = useState(getInitialStudyProgress());
 
   useEffect(() => {
@@ -48,7 +49,7 @@ export default function StudyIsland() {
     };
   }, []);
 
-  const island = useMemo(() => getIslandById(islandId), [islandId]);
+  const island = getIslandById(islandId);
   const islandProgress = useMemo(() => getIslandProgress(progress, islandId), [progress, islandId]);
 
   /* ── error states ── */

@@ -36,6 +36,13 @@ def _ensure_conversation_block(progress: dict) -> dict:
     return progress
 
 
+@router.get("/islands")
+def get_islands():
+    """Get the full ordered island list with metadata — the canonical source for the frontend."""
+    from data.island_metadata import build_islands
+    return build_islands()
+
+
 @router.get("/topics")
 def get_topics():
     """Get both vocabulary topics and alphabet topics for study."""

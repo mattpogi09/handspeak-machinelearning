@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { IslandsProvider } from './contexts/IslandsContext';
 
 // Features
 import Login from './features/auth/Login';
@@ -12,7 +13,6 @@ import StudyIsland from './features/study/StudyIsland';
 import StudySession from './features/study/StudySession';
 import IslandsHub from './features/islands/IslandsHub';
 import IslandOverview from './features/islands/IslandOverview';
-import ReplyQuestSession from './features/islands/ReplyQuestSession';
 import ChainSession from './features/islands/ChainSession';
 import Settings from './features/settings/Settings';
 
@@ -55,6 +55,7 @@ function App() {
   const guard = (element) => (user ? element : <Navigate to="/" />);
 
   return (
+    <IslandsProvider>
     <Router>
       <div className="min-h-screen">
         <Routes>
@@ -90,6 +91,7 @@ function App() {
         </Routes>
       </div>
     </Router>
+    </IslandsProvider>
   );
 }
 

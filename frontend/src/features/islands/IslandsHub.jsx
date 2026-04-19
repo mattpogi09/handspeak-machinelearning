@@ -2,18 +2,17 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Lock, Star, MessageCircle, BookOpen, CheckCircle2 } from 'lucide-react';
 import {
-  STUDY_ISLANDS,
   getStoredStudyProgress,
   loadStudyProgress,
   isIslandUnlocked,
   isIslandCompleted,
   getIslandProgress,
 } from '../study/studyVoyage';
-
-const CONVERSATION_ISLAND_IDS = new Set(['greetings']);
+import { useIslands } from '../../contexts/IslandsContext';
 
 export default function IslandsHub() {
   const navigate = useNavigate();
+  const { islands: rawIslands, islandsLoading } = useIslands();
   const [progress, setProgress] = useState(() => getStoredStudyProgress());
 
   useEffect(() => {
@@ -24,21 +23,24 @@ export default function IslandsHub() {
     return () => { active = false; };
   }, []);
 
-  const islands = useMemo(() => STUDY_ISLANDS.map((island) => {
+  const islands = useMemo(() => rawIslands.map((island) => {
     const unlocked = isIslandUnlocked(progress, island.id);
     const completed = isIslandCompleted(progress, island.id);
     const islandProgress = getIslandProgress(progress, island.id);
-    const doneLevels = islandProgress.completedLevelIds.length;
-    const totalLevels = island.levels.length;
     return {
       ...island,
       unlocked,
       completed,
-      doneLevels,
-      totalLevels,
-      hasConverse: CONVERSATION_ISLAND_IDS.has(island.id),
+      doneLevels: islandProgress.completedLevelIds.length,
+      totalLevels: island.levels.length,
     };
-  }), [progress]);
+  }), [rawIslands, progress]);
+
+  const typeLabel = (type) => {
+    if (type === 'alphabet') return 'Alphabet';
+    if (type === 'conversation') return 'Conversation';
+    return 'Vocabulary';
+  };
 
   return (
     <div style={{
@@ -90,6 +92,12 @@ export default function IslandsHub() {
           </div>
         </div>
 
+        {islandsLoading && islands.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '40px 0', color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: 700 }}>
+            Loading islands…
+          </div>
+        )}
+
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
@@ -104,9 +112,7 @@ export default function IslandsHub() {
                 disabled={locked}
                 style={{
                   textAlign: 'left',
-                  background: locked
-                    ? 'rgba(255,255,255,0.04)'
-                    : 'rgba(255,255,255,0.10)',
+                  background: locked ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.10)',
                   backdropFilter: 'blur(12px)',
                   border: `1.5px solid ${island.completed ? 'rgba(52,211,153,0.55)' : 'rgba(255,255,255,0.18)'}`,
                   borderRadius: 22, padding: '18px 20px', cursor: locked ? 'not-allowed' : 'pointer',
@@ -122,7 +128,7 @@ export default function IslandsHub() {
                     <span style={{ fontSize: 28 }}>{island.icon}</span>
                     <div>
                       <div style={{ fontSize: 11, fontWeight: 900, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.16em', textTransform: 'uppercase' }}>
-                        {island.type === 'alphabet' ? 'Alphabet' : 'Conversation Island'}
+                        {typeLabel(island.type)}
                       </div>
                       <div style={{ fontSize: 17, fontWeight: 900 }}>{island.title}</div>
                     </div>
@@ -137,14 +143,16 @@ export default function IslandsHub() {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  <span style={{
-                    fontSize: 11, fontWeight: 900, padding: '3px 8px', borderRadius: 99,
-                    background: 'rgba(96,165,250,0.18)', color: '#93c5fd', letterSpacing: '0.1em', textTransform: 'uppercase',
-                  }}>
-                    <BookOpen size={10} style={{ display: 'inline', marginRight: 4 }} />
-                    Learn
-                  </span>
-                  {island.type !== 'alphabet' && (
+                  {island.hasLearn && (
+                    <span style={{
+                      fontSize: 11, fontWeight: 900, padding: '3px 8px', borderRadius: 99,
+                      background: 'rgba(96,165,250,0.18)', color: '#93c5fd', letterSpacing: '0.1em', textTransform: 'uppercase',
+                    }}>
+                      <BookOpen size={10} style={{ display: 'inline', marginRight: 4 }} />
+                      Learn
+                    </span>
+                  )}
+                  {island.hasDrill && (
                     <span style={{
                       fontSize: 11, fontWeight: 900, padding: '3px 8px', borderRadius: 99,
                       background: 'rgba(251,191,36,0.18)', color: '#fde68a', letterSpacing: '0.1em', textTransform: 'uppercase',
