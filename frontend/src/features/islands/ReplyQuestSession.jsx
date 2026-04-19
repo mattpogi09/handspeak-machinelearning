@@ -268,6 +268,23 @@ export default function ReplyQuestSession() {
             }} />
           </div>
 
+          {currentPrompt.situation && (
+            <div style={{
+              padding: '8px 0',
+            }}>
+              <div style={{ fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
+                📍 Context
+              </div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: '#93c5fd', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 24 }}>{currentPrompt.situation.emoji}</span>
+                {currentPrompt.situation.label}
+              </div>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>
+                {currentPrompt.situation.description}
+              </div>
+            </div>
+          )}
+
           <div style={{
             background: 'rgba(255,255,255,0.05)', border: '1.5px solid rgba(255,255,255,0.12)',
             borderRadius: 18, padding: '14px 16px',

@@ -309,6 +309,24 @@ export default function ChainSession() {
             </div>
           )}
 
+          {/* Situation Context Card */}
+          {currentTurn.situation && (
+            <div style={{
+              padding: '8px 0',
+            }}>
+              <div style={{ fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
+                📍 Context
+              </div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: '#93c5fd', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 24 }}>{currentTurn.situation.emoji}</span>
+                {currentTurn.situation.label}
+              </div>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>
+                {currentTurn.situation.description}
+              </div>
+            </div>
+          )}
+
           {/* NPC line (current turn) */}
           <div style={{ background: 'rgba(255,255,255,0.05)', border: '1.5px solid rgba(255,255,255,0.12)', borderRadius: 18, padding: '12px 14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>

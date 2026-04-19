@@ -178,7 +178,7 @@ Acceptance criteria:
 
 ---
 
-## Phase 4 - Island mastery and unlock logic
+## Phase 4 - Island mastery and unlock logic (done)
 
 Objective:
 Implement progression logic that unlocks islands and lessons by demonstrated ability.

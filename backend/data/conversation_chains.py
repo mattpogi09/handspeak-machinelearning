@@ -20,6 +20,7 @@ GREETINGS_CHAINS: list[dict[str, Any]] = [
         "id": "greetings-first-meeting",
         "island_id": "greetings",
         "title": "First Meeting",
+        "situation": "first_meeting",
         "description": "A 4-turn exchange — hello, how you're doing, a thank you, then goodbye.",
         "max_attempts_per_turn": MAX_ATTEMPTS_PER_TURN,
         "turns": [
@@ -61,6 +62,7 @@ GREETINGS_CHAINS: list[dict[str, Any]] = [
         "id": "greetings-morning-checkin",
         "island_id": "greetings",
         "title": "Morning Check-in",
+        "situation": "school",
         "description": "A quick 3-turn morning greeting — honest about how you're feeling.",
         "max_attempts_per_turn": MAX_ATTEMPTS_PER_TURN,
         "turns": [

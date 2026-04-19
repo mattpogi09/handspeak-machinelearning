@@ -154,10 +154,20 @@ def _public_prompt(prompt: dict[str, Any]) -> dict[str, Any]:
     """Strip internal-only fields before returning a prompt to the frontend."""
     response_type = prompt.get("response_type")
     type_info = RESPONSE_TYPES.get(response_type, {}) if response_type else {}
+    
+    # Enrich with situation if it exists
+    situation_id = prompt.get("situation")
+    situation_info = None
+    if situation_id:
+        from data.situations import SITUATIONS
+        situation_info = SITUATIONS.get(situation_id)
+
     return {
         "id": prompt["id"],
         "island_id": prompt["island_id"],
         "order": prompt.get("order"),
+        "situation_id": situation_id,
+        "situation": situation_info,
         "prompt_text": prompt["prompt_text"],
         "expected_word": prompt["expected_word"],
         "acceptable_words": prompt.get("acceptable_words", [prompt["expected_word"]]),
@@ -168,7 +178,7 @@ def _public_prompt(prompt: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _score_attempt(prompt: dict[str, Any], verification: Any) -> dict[str, Any]:
+def _score_attempt(prompt: dict[str, Any], verification: Any, situation_id: str | None = None) -> dict[str, Any]:
     """Map a gesture verification result + prompt into a scored attempt + feedback."""
     acceptable = {w.lower() for w in prompt.get("acceptable_words", [prompt["expected_word"]])}
     best_match = (verification.best_match or "").strip().lower()
@@ -183,9 +193,24 @@ def _score_attempt(prompt: dict[str, Any], verification: Any) -> dict[str, Any]:
     type_correct: bool | None = None
     if response_type_expected is not None:
         type_correct = response_type_actual == response_type_expected
+        
+    # Phase 5: context-aware scoring
+    context_mismatch = False
+    if is_correct and situation_id and best_match:
+        from data.situations import CONTEXT_BANNED_WORDS
+        if situation_id in CONTEXT_BANNED_WORDS and best_match in CONTEXT_BANNED_WORDS[situation_id]:
+            is_correct = False
+            context_mismatch = True
 
     # Build feedback — type-mismatch message takes priority over generic wrong-word
-    if is_correct:
+    if context_mismatch:
+        from data.situations import SITUATIONS
+        sit_label = SITUATIONS.get(situation_id, {}).get("label", situation_id)
+        feedback_text = (
+            f"That sign ({best_match.upper()}) is technically correct, but "
+            f"it is inappropriate or too informal for a {sit_label} context! Try a more appropriate sign."
+        )
+    elif is_correct:
         feedback_text = (
             f"Nice reply! You signed {verification.best_match.upper()} "
             f"(confidence {best_similarity:.2f})."
@@ -218,6 +243,7 @@ def _score_attempt(prompt: dict[str, Any], verification: Any) -> dict[str, Any]:
         "actual_type_label": actual_info.get("label") if response_type_actual else None,
         "type_correct": type_correct,
         "explanation": feedback_text if (type_correct is False) else None,
+        "context_mismatch": context_mismatch,
     }
 
     return {
@@ -295,7 +321,7 @@ def submit_attempt(payload: SessionSubmitPayload):
         user_id=payload.user_id,
     )
     target_confidence = getattr(verification, "target_similarity", 0.0)
-    scored = _score_attempt(prompt, verification)
+    scored = _score_attempt(prompt, verification, situation_id=prompt.get("situation"))
     
     if payload.user_id:
         try:
@@ -464,10 +490,18 @@ def _compute_coherence(transcript: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _public_chain(chain: dict[str, Any]) -> dict[str, Any]:
+    situation_id = chain.get("situation")
+    situation_info = None
+    if situation_id:
+        from data.situations import SITUATIONS
+        situation_info = SITUATIONS.get(situation_id)
+
     return {
         "id": chain["id"],
         "island_id": chain["island_id"],
         "title": chain["title"],
+        "situation_id": situation_id,
+        "situation": situation_info,
         "description": chain["description"],
         "turns_count": len(chain["turns"]),
         "max_attempts_per_turn": chain.get("max_attempts_per_turn", 2),
@@ -570,7 +604,7 @@ def submit_chain_turn(payload: ChainSubmitPayload):
     verification = _verify_dynamic_internal(verify_request)
 
     # Reuse Phase 2 scoring (prompt dict has same shape as turn dict for scoring)
-    scored = _score_attempt(turn, verification)
+    scored = _score_attempt(turn, verification, situation_id=chain.get("situation") if chain else None)
     target_confidence = getattr(verification, "target_similarity", 0.0)
 
     if payload.user_id:
