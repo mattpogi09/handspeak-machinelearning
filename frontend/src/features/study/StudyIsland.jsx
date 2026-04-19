@@ -30,7 +30,7 @@ const ISLAND_ICONS = {
 export default function StudyIsland() {
   const { islandId } = useParams();
   const navigate = useNavigate();
-  const { getIslandById } = useIslands();
+  const { getIslandById, islandsLoading } = useIslands();
   const [progress, setProgress] = useState(getInitialStudyProgress());
 
   useEffect(() => {
@@ -53,6 +53,16 @@ export default function StudyIsland() {
   const islandProgress = useMemo(() => getIslandProgress(progress, islandId), [progress, islandId]);
 
   /* ── error states ── */
+  if (islandsLoading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'radial-gradient(ellipse at 18% 0%,#0ea5e9 0%,#0369a1 30%,#082f49 65%,#041421 100%)', color: 'white', padding: 20, fontFamily: "'Nunito',sans-serif" }}>
+        <div style={{ textAlign: 'center', opacity: 0.7, fontWeight: 700, fontSize: 16 }}>
+          Rendering Island Data…
+        </div>
+      </div>
+    );
+  }
+
   if (!island) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'radial-gradient(ellipse at 18% 0%,#0ea5e9 0%,#0369a1 30%,#082f49 65%,#041421 100%)', color: 'white', padding: 20, fontFamily: "'Nunito',sans-serif" }}>

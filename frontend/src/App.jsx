@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
 import { IslandsProvider } from './contexts/IslandsContext';
 
 // Features
@@ -94,6 +95,24 @@ function App() {
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </div>
+      <Toaster 
+        position="top-center" 
+        toastOptions={{ 
+          style: { 
+            background: 'var(--ocean-panel)', 
+            color: '#fff', 
+            border: '1px solid rgba(255,255,255,0.1)',
+            backdropFilter: 'blur(10px)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
+          },
+          success: {
+            iconTheme: { primary: '#34d399', secondary: '#fff' }
+          },
+          error: {
+            iconTheme: { primary: '#ef4444', secondary: '#fff' }
+          }
+        }} 
+      />
     </Router>
     </IslandsProvider>
   );

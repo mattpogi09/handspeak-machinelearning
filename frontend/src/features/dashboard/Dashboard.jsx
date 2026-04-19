@@ -198,12 +198,6 @@ export default function Dashboard({ user }) {
                   <div style={{ fontSize: 11, fontWeight: 900, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>Next up</div>
                   <div style={{ fontSize: 15, fontWeight: 900, color: 'white' }}>{currentIsland.title}</div>
                 </div>
-                {currentIslandId === 'greetings' && (
-                  <span style={{ fontSize: 10, fontWeight: 900, color: '#6ee7b7', background: 'rgba(52,211,153,0.18)', border: '1px solid rgba(52,211,153,0.4)', padding: '3px 8px', borderRadius: 99, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
-                    <MessageCircle size={9} style={{ display: 'inline', marginRight: 4 }} />
-                    Reply Quest ready
-                  </span>
-                )}
               </div>
             );
           })()}

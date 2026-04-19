@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, MessageCircle } from 'lucide-react';
+import { ArrowLeft, MessageCircle, Map as MapIcon, RotateCcw } from 'lucide-react';
 import {
   getStoredStudyProgress,
   loadStudyProgress,
@@ -10,10 +10,11 @@ import {
 } from '../study/studyVoyage';
 import { useIslands } from '../../contexts/IslandsContext';
 import IslandNode from './IslandNode';
+import Skeleton from '../../components/Skeleton';
 
 export default function IslandsHub() {
   const navigate = useNavigate();
-  const { islands: rawIslands, islandsLoading } = useIslands();
+  const { islands: rawIslands, islandsLoading, error } = useIslands();
   const [progress, setProgress] = useState(() => getStoredStudyProgress());
   const mapContainerRef = useRef(null);
 
@@ -110,44 +111,68 @@ export default function IslandsHub() {
           </div>
         </div>
 
-        {islandsLoading && islands.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: 700 }}>
-            Loading map…
+        {error ? (
+          <div style={{
+            textAlign: 'center', padding: '60px 20px', background: 'rgba(255,0,0,0.05)',
+            border: '1px solid rgba(239,68,68,0.2)', borderRadius: 24, margin: '40px 0'
+          }}>
+            <MapIcon size={48} color="#ef4444" style={{ margin: '0 auto 16px', opacity: 0.8 }} />
+            <h3 style={{ fontSize: 20, margin: '0 0 8px', color: '#fca5a5' }}>Map Unavailable</h3>
+            <p style={{ margin: '0 0 20px', color: 'rgba(255,255,255,0.7)', fontSize: 15 }}>{error}</p>
+            <button onClick={() => window.location.reload()}
+              style={{
+                background: 'rgba(239,68,68,0.2)', border: 'none', color: '#fca5a5',
+                padding: '10px 24px', borderRadius: 50, fontWeight: 700, cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: 8
+              }}>
+              <RotateCcw size={16} /> Try Again
+            </button>
+          </div>
+        ) : (
+          <div 
+            ref={mapContainerRef}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              overflowX: 'auto',
+              padding: '240px 80px 140px 80px', // Increased top padding heavily so tooltip doesn't get clipped by the overflow container
+              margin: '0 -24px', // Break out of container padding for edge-to-edge scrolling
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none', // hide scrollbar for cleaner look
+              msOverflowStyle: 'none',
+              background: 'linear-gradient(to bottom, rgba(4,20,33,0) 0%, rgba(3,105,161,0.15) 50%, rgba(4,20,33,0) 100%)',
+              borderTop: '1px solid rgba(255,255,255,0.05)',
+              borderBottom: '1px solid rgba(255,255,255,0.05)',
+              boxShadow: 'inset 0 0 100px rgba(0,0,0,0.5)',
+            }}
+            className="hide-scrollbar"
+          >
+            {islandsLoading && islands.length === 0 ? (
+              <div style={{ display: 'flex', gap: 0, alignItems: 'center', opacity: 0.5 }}>
+                 {[1,2,3,4,5].map(i => (
+                    <div key={i} style={{ width: 340, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
+                      <Skeleton width={180} height={180} borderRadius="50%" style={{ clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)' }} />
+                      <Skeleton width={120} height={24} borderRadius={12} />
+                    </div>
+                 ))}
+              </div>
+            ) : (
+              islands.map((island, index) => (
+                <IslandNode 
+                  key={island.id}
+                  island={island}
+                  index={index}
+                  isFirst={index === 0}
+                  isLast={index === islands.length - 1}
+                  locked={!island.unlocked}
+                  completed={island.completed}
+                  active={island.unlocked && !island.completed}
+                  onClick={() => navigate(`/islands/${island.id}`)}
+                />
+              ))
+            )}
           </div>
         )}
-
-        <div 
-          ref={mapContainerRef}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            overflowX: 'auto',
-            padding: '240px 80px 140px 80px', // Increased top padding heavily so tooltip doesn't get clipped by the overflow container
-            margin: '0 -24px', // Break out of container padding for edge-to-edge scrolling
-            WebkitOverflowScrolling: 'touch',
-            scrollbarWidth: 'none', // hide scrollbar for cleaner look
-            msOverflowStyle: 'none',
-            background: 'linear-gradient(to bottom, rgba(4,20,33,0) 0%, rgba(3,105,161,0.15) 50%, rgba(4,20,33,0) 100%)',
-            borderTop: '1px solid rgba(255,255,255,0.05)',
-            borderBottom: '1px solid rgba(255,255,255,0.05)',
-            boxShadow: 'inset 0 0 100px rgba(0,0,0,0.5)',
-          }}
-          className="hide-scrollbar"
-        >
-          {islands.map((island, index) => (
-            <IslandNode 
-              key={island.id}
-              island={island}
-              index={index}
-              isFirst={index === 0}
-              isLast={index === islands.length - 1}
-              locked={!island.unlocked}
-              completed={island.completed}
-              active={island.unlocked && !island.completed}
-              onClick={() => navigate(`/islands/${island.id}`)}
-            />
-          ))}
-        </div>
       </section>
 
       <style>{`

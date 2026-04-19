@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { toast } from 'react-hot-toast';
 import { fetchJson } from '../lib/api';
 import { ISLANDS_STORAGE_KEY, setIslandsCache } from '../features/study/studyVoyage';
 
 const IslandsContext = createContext({
   islands: [],
   islandsLoading: true,
+  error: null,
   getIslandById: () => undefined,
 });
 
@@ -38,9 +40,11 @@ const loadCached = () => {
 export function IslandsProvider({ children }) {
   const [islands, setIslands] = useState(loadCached);
   const [islandsLoading, setIslandsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     let active = true;
+    setError(null);
     fetchJson('/api/study/islands')
       .then((raw) => {
         if (!active) return;
@@ -48,7 +52,11 @@ export function IslandsProvider({ children }) {
         setIslandsCache(normalized);
         setIslands(normalized);
       })
-      .catch(() => {})
+      .catch((e) => {
+        if (!active) return;
+        setError(e.message || 'Failed to load mapped learning islands');
+        toast.error('Unable to load map data. Please check connection.');
+      })
       .finally(() => { if (active) setIslandsLoading(false); });
     return () => { active = false; };
   }, []);
@@ -56,7 +64,7 @@ export function IslandsProvider({ children }) {
   const getIslandById = (id) => islands.find((i) => i.id === id);
 
   return (
-    <IslandsContext.Provider value={{ islands, islandsLoading, getIslandById }}>
+    <IslandsContext.Provider value={{ islands, islandsLoading, error, getIslandById }}>
       {children}
     </IslandsContext.Provider>
   );

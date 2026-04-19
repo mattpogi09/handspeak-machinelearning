@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Fish, Eye, EyeOff } from 'lucide-react';
+import { Fish, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { postJson } from '../../lib/api';
+import Spinner from '../../components/Spinner';
 
 export default function Login({ onLogin }) {
   const navigate = useNavigate();
@@ -10,20 +12,30 @@ export default function Login({ onLogin }) {
   const [agreed, setAgreed]     = useState(false);
   const [error, setError]       = useState('');
   const [showPass, setShowPass] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!email || !password) { setError('Please fill in all fields.'); return; }
-    if (!agreed)             { setError('Please agree to the terms.'); return; }
+    
+    // Inline defensive validation
+    if (!email || !password) { toast.error('Please fill in all fields.'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast.error('Please enter a valid email address.'); return; }
+    if (!agreed) { toast.error('Please agree to the terms to continue.'); return; }
 
+    setIsLoading(true);
     try {
       const user = await postJson('/api/auth/signin', { email, password });
+      toast.success('Successfully logged in!');
       localStorage.setItem('handspeak_user', JSON.stringify(user));
       onLogin(user);
       navigate(user.profile_complete ? '/dashboard' : '/welcome');
     } catch (signInError) {
-      setError(signInError.message || 'Unable to sign in');
+      const msg = signInError.message || 'Unable to sign in';
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -105,11 +117,12 @@ export default function Login({ onLogin }) {
             </label>
 
             <button type="submit"
-              style={{ width: '100%', padding: '18px 0', borderRadius: 14, border: 'none', background: '#1a73e8', color: 'white', fontSize: 16, fontWeight: 900, cursor: 'pointer', letterSpacing: '0.1em', textTransform: 'uppercase', boxShadow: '0 4px 18px rgba(26,115,232,0.4)', transition: 'box-shadow 0.2s' }}
-              onMouseEnter={e => e.currentTarget.style.boxShadow = '0 6px 28px rgba(26,115,232,0.6)'}
-              onMouseLeave={e => e.currentTarget.style.boxShadow = '0 4px 18px rgba(26,115,232,0.4)'}
+              disabled={isLoading}
+              style={{ width: '100%', padding: '18px 0', borderRadius: 14, border: 'none', background: isLoading ? '#94a3b8' : '#1a73e8', color: 'white', fontSize: 16, fontWeight: 900, cursor: isLoading ? 'not-allowed' : 'pointer', letterSpacing: '0.1em', textTransform: 'uppercase', boxShadow: isLoading ? 'none' : '0 4px 18px rgba(26,115,232,0.4)', transition: 'box-shadow 0.2s', display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center' }}
+              onMouseEnter={e => { if(!isLoading) e.currentTarget.style.boxShadow = '0 6px 28px rgba(26,115,232,0.6)' }}
+              onMouseLeave={e => { if(!isLoading) e.currentTarget.style.boxShadow = '0 4px 18px rgba(26,115,232,0.4)' }}
             >
-              SIGN IN
+              {isLoading ? <span style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.8 }}><Spinner size={18} /> SIGNING IN...</span> : 'SIGN IN'}
             </button>
 
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, paddingTop: 4 }}>

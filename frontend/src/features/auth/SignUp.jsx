@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Fish, Eye, EyeOff } from 'lucide-react';
+import { Fish, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { postJson } from '../../lib/api';
+import Spinner from '../../components/Spinner';
 
 export default function SignUp({ onLogin }) {
   const navigate = useNavigate();
@@ -12,22 +14,32 @@ export default function SignUp({ onLogin }) {
   const [error, setError] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!email || !password || !confirm) { setError('Please fill in all fields'); return; }
-    if (password !== confirm) { setError('Passwords do not match'); return; }
-    if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
-    if (!agreed) { setError('Please agree to the terms'); return; }
+    
+    // Inline defensive validation
+    if (!email || !password || !confirm) { toast.error('Please fill in all fields'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast.error('Please enter a valid email address.'); return; }
+    if (password !== confirm) { toast.error('Passwords do not match'); return; }
+    if (password.length < 6) { toast.error('Password must be at least 6 characters'); return; }
+    if (!agreed) { toast.error('Please agree to the terms to continue'); return; }
 
+    setIsLoading(true);
     try {
       const user = await postJson('/api/auth/signup', { email, password });
+      toast.success('Account successfully created!');
       localStorage.setItem('handspeak_user', JSON.stringify(user));
       onLogin(user);
       navigate('/welcome');
     } catch (signUpError) {
-      setError(signUpError.message || 'Unable to create account');
+      const msg = signUpError.message || 'Unable to create account';
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -119,10 +131,11 @@ export default function SignUp({ onLogin }) {
             </label>
 
             <button type="submit"
-              style={{ width: '100%', padding: '18px 0', borderRadius: 14, border: 'none', background: '#1a73e8', color: 'white', fontSize: 16, fontWeight: 900, cursor: 'pointer', letterSpacing: '0.1em', textTransform: 'uppercase', boxShadow: '0 4px 18px rgba(26,115,232,0.4)', transition: 'box-shadow 0.2s' }}
-              onMouseEnter={e => e.currentTarget.style.boxShadow = '0 6px 28px rgba(26,115,232,0.6)'}
-              onMouseLeave={e => e.currentTarget.style.boxShadow = '0 4px 18px rgba(26,115,232,0.4)'}>
-              CREATE ACCOUNT
+              disabled={isLoading}
+              style={{ width: '100%', padding: '18px 0', borderRadius: 14, border: 'none', background: isLoading ? '#94a3b8' : '#1a73e8', color: 'white', fontSize: 16, fontWeight: 900, cursor: isLoading ? 'not-allowed' : 'pointer', letterSpacing: '0.1em', textTransform: 'uppercase', boxShadow: isLoading ? 'none' : '0 4px 18px rgba(26,115,232,0.4)', transition: 'box-shadow 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              onMouseEnter={e => { if(!isLoading) e.currentTarget.style.boxShadow = '0 6px 28px rgba(26,115,232,0.6)' }}
+              onMouseLeave={e => { if(!isLoading) e.currentTarget.style.boxShadow = '0 4px 18px rgba(26,115,232,0.4)' }}>
+              {isLoading ? <span style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.8 }}><Spinner size={18} /> CREATING ACCOUNT...</span> : 'CREATE ACCOUNT'}
             </button>
 
             <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 4 }}>
