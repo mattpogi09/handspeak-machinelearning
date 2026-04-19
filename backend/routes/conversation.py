@@ -413,6 +413,7 @@ def start_chain(payload: ChainStartPayload):
         "turns_count": len(chain["turns"]),
         "max_attempts_per_turn": chain.get("max_attempts_per_turn", 2),
         "current_turn": 0,
+        "turns_snapshot": session.get("turns_snapshot") or chain["turns"],
         "current_turn_data": first_turn,
     }
 
@@ -515,6 +516,22 @@ def submit_chain_turn(payload: ChainSubmitPayload):
             store.complete_chain_session(payload.chain_session_id, chain_summary)
     except RuntimeError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
+
+    if payload.user_id is not None:
+        try:
+            store.update_user_conversation_progress(
+                user_id=payload.user_id,
+                island_id=session["island_id"],
+                attempt_is_correct=scored["is_correct"],
+                session_completed=is_chain_complete,
+                last_session_id=payload.chain_session_id,
+            )
+        except RuntimeError:
+            logger.exception(
+                "progress_update_failed user=%s chain_session=%s",
+                payload.user_id,
+                payload.chain_session_id,
+            )
 
     next_turn_data = None
     if should_advance and not is_chain_complete and next_turn_index < total_turns:

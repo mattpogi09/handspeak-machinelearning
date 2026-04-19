@@ -24,6 +24,18 @@ RESPONSE_TYPES: dict[str, dict[str, str]] = {
         "label": "Denial",
         "description": "Refusing, disagreeing, or saying no.",
     },
+    "clarify": {
+        "label": "Clarification",
+        "description": "Asking the other person to clarify or repeat.",
+    },
+    "ask-back": {
+        "label": "Ask-back",
+        "description": "Asking a follow-up question to keep the exchange going.",
+    },
+    "repair": {
+        "label": "Repair",
+        "description": "Pausing or resetting after a misunderstanding.",
+    },
     "react": {
         "label": "Emotional reaction",
         "description": "Expressing a feeling or emotional state.",
@@ -54,6 +66,15 @@ WORD_TO_RESPONSE_TYPE: dict[str, str] = {
     # Denials
     "no": "deny",
     "sorry": "deny",
+    # Clarification
+    "say": "clarify",
+    "listen": "clarify",
+    # Ask-back (follow-up questions)
+    "who": "ask-back",
+    "where": "ask-back",
+    "why": "ask-back",
+    # Repair / reset
+    "wait": "repair",
     # Emotional reactions
     "sad": "react",
     "angry": "react",
@@ -160,6 +181,12 @@ _MISMATCH_MESSAGES: dict[tuple[str, str], str] = {
     ),
 }
 
+_EXPECTED_TYPE_HINTS: dict[str, str] = {
+    "clarify": "This is a clarification moment — ask them to repeat or clarify. Try: {words}.",
+    "ask-back": "This is a follow-up question — ask back with WHO, WHERE, or WHY. Try: {words}.",
+    "repair": "This is a repair moment — pause or reset the exchange. Try: {words}.",
+}
+
 
 def classify_word(word: str) -> str | None:
     """Return the response type for a given vocabulary word, or None if unknown."""
@@ -179,6 +206,9 @@ def get_mismatch_feedback(
 
     expected_info = RESPONSE_TYPES.get(expected_type, {})
     words_str = " or ".join(w.upper() for w in (acceptable_words or [])[:3])
+    if expected_type in _EXPECTED_TYPE_HINTS:
+        hint = _EXPECTED_TYPE_HINTS[expected_type]
+        return hint.format(words=words_str or "the expected sign")
     return (
         f"Wrong response type. Expected a {expected_info.get('label', expected_type).lower()}. "
         f"Try signing: {words_str or 'the expected sign'}."

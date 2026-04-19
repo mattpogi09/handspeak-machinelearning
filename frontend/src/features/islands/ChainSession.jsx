@@ -17,6 +17,9 @@ const RESPONSE_TYPE_LABELS = {
   'greet-close': 'Farewell',
   confirm: 'Confirmation',
   deny: 'Denial',
+  clarify: 'Clarification',
+  'ask-back': 'Ask-back',
+  repair: 'Repair',
   react: 'Emotional reaction',
   gratitude: 'Gratitude',
 };
@@ -83,9 +86,11 @@ export default function ChainSession() {
         islandId,
         chainId: chain.id,
       });
+      const snapshot = session.turns_snapshot
+        || (session.current_turn_data ? [session.current_turn_data] : []);
       setSelectedChain({ ...chain, title: session.title, description: session.description });
       setChainSessionId(session.chain_session_id);
-      setTurnsSnapshot(session.turns_snapshot || []);
+      setTurnsSnapshot(snapshot);
       setCurrentTurnIndex(0);
       setAttemptsRemaining(session.max_attempts_per_turn ?? 2);
       setStatus('Read the NPC line, then record your reply.');

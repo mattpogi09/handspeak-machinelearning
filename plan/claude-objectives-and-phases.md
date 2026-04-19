@@ -140,7 +140,7 @@ Acceptance criteria:
 
 ---
 
-## Phase 2 - Response behavior engine
+## Phase 2 - Response behavior engine (done)
 
 Objective:
 Implement response-type aware scoring and feedback.
@@ -159,7 +159,7 @@ Acceptance criteria:
 
 ---
 
-## Phase 3 - Multi-turn conversation chains
+## Phase 3 - Multi-turn conversation chains (done)
 
 Objective:
 Implement 3-6 turn conversation sessions with coherence scoring.
