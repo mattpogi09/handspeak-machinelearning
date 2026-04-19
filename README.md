@@ -83,7 +83,7 @@ To run the full stack locally, you need both the frontend client and the backend
 ```bash
 cd backend
 .venv\Scripts\Activate.ps1  # (Or source .venv/bin/activate on Mac/Linux)
-uvicorn main:app --reload
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 *The API will be available at `http://localhost:8000`*
 
