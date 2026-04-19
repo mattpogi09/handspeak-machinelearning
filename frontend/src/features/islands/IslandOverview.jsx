@@ -8,6 +8,7 @@ import {
   isIslandUnlocked,
 } from '../study/studyVoyage';
 import { useIslands } from '../../contexts/IslandsContext';
+import EmojiIcon from '../../components/EmojiIcon';
 
 export default function IslandOverview() {
   const navigate = useNavigate();
@@ -75,9 +76,9 @@ export default function IslandOverview() {
             <div style={{
               width: 60, height: 60, borderRadius: 18,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 30, background: 'rgba(255,255,255,0.12)',
+              background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.9)'
             }}>
-              {island.icon}
+              <EmojiIcon emoji={island.icon} size={30} />
             </div>
             <div>
               <div style={{ fontSize: 11, fontWeight: 900, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.18em', textTransform: 'uppercase' }}>

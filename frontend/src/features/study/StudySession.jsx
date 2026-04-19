@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { X, Circle, ArrowRight, CheckCircle, Crown, Lock, Star, Lightbulb } from 'lucide-react';
+import { X, Circle, ArrowRight, CheckCircle, Crown, Lock, Star, Lightbulb, Waves } from 'lucide-react';
 import Camera from '../../components/Camera';
 import { postJson } from '../../lib/api';
 import {
@@ -80,7 +80,9 @@ export default function StudySession() {
     return (
       <div style={{ minHeight: '100vh', background: '#041524', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 56, marginBottom: 12 }}>🌊</div>
+          <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', opacity: 0.8 }}>
+            <Waves size={56} color="#60a5fa" />
+          </div>
           <p style={{ fontSize: 20, fontWeight: 900, margin: '0 0 14px' }}>Level not found!</p>
           <button onClick={() => navigate('/study')}
             style={{ border: 'none', borderRadius: 14, padding: '12px 20px', cursor: 'pointer', fontWeight: 900, fontSize: 15, background: 'linear-gradient(135deg,#34d399,#22d3ee)', color: '#064e3b', fontFamily: "'Nunito',sans-serif" }}>

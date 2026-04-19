@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Settings, BookOpen, Trophy, Star, TrendingUp, Award, MessageCircle, ArrowRight, Target } from 'lucide-react';
 import { getStoredStudyProgress, getVoyageStats, loadStudyProgress, getCurrentIslandId } from '../study/studyVoyage';
 import { useIslands } from '../../contexts/IslandsContext';
+import EmojiIcon from '../../components/EmojiIcon';
 
 /* ── floating particle ── */
 const Particle = ({ x, y, size, delay, opacity }) => (
@@ -190,7 +191,9 @@ export default function Dashboard({ user }) {
             if (!currentIsland) return null;
             return (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 16, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}>
-                <div style={{ fontSize: 28 }}>{currentIsland.icon}</div>
+                <div style={{ color: 'rgba(255,255,255,0.9)' }}>
+                  <EmojiIcon emoji={currentIsland.icon} size={28} />
+                </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 11, fontWeight: 900, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>Next up</div>
                   <div style={{ fontSize: 15, fontWeight: 900, color: 'white' }}>{currentIsland.title}</div>
