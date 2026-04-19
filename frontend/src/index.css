@@ -179,3 +179,35 @@ input {
 .fish-swim-r { animation: swim-right linear infinite; }
 .fish-swim-l { animation: swim-left  linear infinite; }
 .bubble-rise { animation: bubble-rise ease-in infinite; }
+
+
+/* ── Mobile Responsiveness ──────────────────────────────────── */
+@media (max-width: 768px) {
+  :root {
+    --radius-md: 10px;
+    --radius-lg: 16px;
+  }
+
+  html, body {
+    font-size: 14px;
+  }
+
+  .page-center {
+    padding: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --radius-md: 8px;
+    --radius-lg: 12px;
+  }
+
+  html, body {
+    font-size: 13px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+}

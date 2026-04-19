@@ -64,17 +64,17 @@ WORD_TO_RESPONSE_TYPE: dict[str, str] = {
     "good": "confirm",
     "okay": "confirm",
     # Denials
-    "no": "deny",
     "sorry": "deny",
     # Clarification
     "say": "clarify",
     "listen": "clarify",
+    "where": "clarify",
+    "who": "clarify",
+    "why": "clarify",
     # Ask-back (follow-up questions)
-    "who": "ask-back",
-    "where": "ask-back",
-    "why": "ask-back",
     # Repair / reset
     "wait": "repair",
+    "no": "repair",
     # Emotional reactions
     "sad": "react",
     "angry": "react",
@@ -178,6 +178,46 @@ _MISMATCH_MESSAGES: dict[tuple[str, str], str] = {
     ),
     ("gratitude", "react"): (
         "That's an emotional reaction — what's needed here is gratitude. Try THANK YOU."
+    ),
+    
+    # Clarification mismatches
+    ("clarify", "greet-open"): (
+        "That's a greeting — but this is a clarification moment. Ask them to repeat with WHERE, WHO, or WHY."
+    ),
+    ("clarify", "greet-close"): (
+        "That's a farewell — for clarification, try WHERE, WHO, or WHY."
+    ),
+    ("clarify", "confirm"): (
+        "That's an agreement — ask for clarification instead with WHERE, WHO, or WHY."
+    ),
+    ("clarify", "deny"): (
+        "That's a refusal — ask them to repeat with WHERE, WHO, or WHY."
+    ),
+    ("clarify", "react"): (
+        "That's an emotional reaction — for clarification, use WHERE, WHO, or WHY."
+    ),
+    ("clarify", "gratitude"): (
+        "That's gratitude — ask for clarification with WHERE, WHO, or WHY instead."
+    ),
+    
+    # Repair mismatches
+    ("repair", "greet-open"): (
+        "That's a greeting — but this is a repair moment. Pause the exchange with WAIT or NO."
+    ),
+    ("repair", "greet-close"): (
+        "That's a farewell — to repair the exchange, try WAIT or NO."
+    ),
+    ("repair", "confirm"): (
+        "That's an agreement — for repair, use WAIT or NO to reset."
+    ),
+    ("repair", "deny"): (
+        "That's already a denial — use WAIT or NO if you need to pause and reset."
+    ),
+    ("repair", "react"): (
+        "That's an emotional reaction — for repair, sign WAIT or NO."
+    ),
+    ("repair", "gratitude"): (
+        "That's gratitude — to repair, use WAIT or NO to pause the conversation."
     ),
 }
 

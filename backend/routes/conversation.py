@@ -43,7 +43,7 @@ MASTERY_UNLOCK_THRESHOLD = 70
 def _get_island_order() -> list[str]:
     return [i["id"] for i in build_islands()]
 
-def _update_mastery(user_id: int, island_id: str, is_correct: bool, confidence: float, type_correct: bool | None):
+def _update_mastery(user_id: int, island_id: str, is_correct: bool, confidence: float, type_correct: bool | None, session_type: str | None = None):
     """Dynamic axis update logic for Phase 4."""
     row = store._fetchone(
         "SELECT * FROM island_mastery WHERE user_id = %s AND island_id = %s",
@@ -70,11 +70,16 @@ def _update_mastery(user_id: int, island_id: str, is_correct: bool, confidence: 
     new_timing = min(100, int(confidence * 100))
     timing_score = int(record["timing_score"] * (1 - alpha) + new_timing * alpha)
     
+    # Repair scoring
+    repair_score = record.get("repair_score", 0)
+    if session_type == "repair" and is_correct:
+        repair_score = min(100, int(repair_score + (10 * (1 - alpha)) + (100 * alpha)))
+    
     store._execute("""
         UPDATE island_mastery 
-        SET accuracy_score = %s, comprehension_score = %s, timing_score = %s, last_played_at = NOW() 
+        SET accuracy_score = %s, comprehension_score = %s, timing_score = %s, repair_score = %s, last_played_at = NOW() 
         WHERE id = %s
-    """, (acc_score, comp_score, timing_score, record["id"]))
+    """, (acc_score, comp_score, timing_score, repair_score, record["id"]))
 
 @router.get("/progress/{user_id}", response_model=dict)
 def get_user_progress(user_id: int):
@@ -141,6 +146,7 @@ def get_user_progress(user_id: int):
 class SessionStartPayload(BaseModel):
     user_id: int
     island_id: str
+    is_drill: bool = False
 
 
 class SessionSubmitPayload(BaseModel):
@@ -271,7 +277,8 @@ def list_prompts(island_id: str):
 
 @router.post("/session/start")
 def start_session(payload: SessionStartPayload):
-    prompts = get_prompts_for_island(payload.island_id)
+    actual_island_id = "repair" if payload.is_drill else payload.island_id
+    prompts = get_prompts_for_island(actual_island_id)
     if not prompts:
         raise HTTPException(status_code=404, detail=f"No prompts for island '{payload.island_id}'")
 
@@ -323,6 +330,8 @@ def submit_attempt(payload: SessionSubmitPayload):
     target_confidence = getattr(verification, "target_similarity", 0.0)
     scored = _score_attempt(prompt, verification, situation_id=prompt.get("situation"))
     
+    session_type = "repair" if payload.prompt_id.startswith("repair-") else None
+
     if payload.user_id:
         try:
             _update_mastery(
@@ -331,6 +340,7 @@ def submit_attempt(payload: SessionSubmitPayload):
                 is_correct=scored["is_correct"],
                 confidence=target_confidence,
                 type_correct=scored["_type_correct"],
+                session_type=session_type,
             )
         except Exception as e:
             logger.error(f"Failed to update mastery in submit_attempt: {e}")

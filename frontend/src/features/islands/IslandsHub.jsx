@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, MessageCircle, Map as MapIcon, RotateCcw } from 'lucide-react';
+import { ArrowLeft, ArrowRight, MessageCircle, Map as MapIcon, RotateCcw } from 'lucide-react';
 import { getStoredStudyProgress, getIslandProgress, loadStudyProgress } from '../study/studyVoyage';
 import { fetchJson } from '../../lib/api';
 import { useIslands } from '../../contexts/IslandsContext';
@@ -14,6 +14,38 @@ export default function IslandsHub() {
   const [loadingProgress, setLoadingProgress] = useState(true);
   const [localProgress, setLocalProgress] = useState(() => getStoredStudyProgress());
   const mapContainerRef = useRef(null);
+
+  const [showLeftArrow, setShowLeftArrow] = useState(false);
+  const [showRightArrow, setShowRightArrow] = useState(true);
+
+  const handleScroll = () => {
+    if (mapContainerRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = mapContainerRef.current;
+      setShowLeftArrow(scrollLeft > 0);
+      setShowRightArrow(scrollLeft < scrollWidth - clientWidth - 10);
+    }
+  };
+
+  useEffect(() => {
+    const container = mapContainerRef.current;
+    if (container) {
+      container.addEventListener('scroll', handleScroll);
+      handleScroll(); // Check initial state
+      return () => container.removeEventListener('scroll', handleScroll);
+    }
+  }, []);
+
+  const scrollLeft = () => {
+    if (mapContainerRef.current) {
+      mapContainerRef.current.scrollBy({ left: -300, behavior: 'smooth' });
+    }
+  };
+
+  const scrollRight = () => {
+    if (mapContainerRef.current) {
+      mapContainerRef.current.scrollBy({ left: 300, behavior: 'smooth' });
+    }
+  };
 
   const user = JSON.parse(localStorage.getItem('handspeak_user') || '{}');
 
@@ -149,43 +181,101 @@ export default function IslandsHub() {
             </button>
           </div>
         ) : (
-          <div 
-            ref={mapContainerRef}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              overflowX: 'auto',
-              padding: '360px 80px 140px 80px', // heavily increased top padding for larger tooltips
-              margin: '-120px -24px 0 -24px', // pull map up to counterbalance padding
-              WebkitOverflowScrolling: 'touch',
-              scrollbarWidth: 'none', // hide scrollbar for cleaner look
-              msOverflowStyle: 'none',
-              }}
-              className="hide-scrollbar"
-          >
-            {(islandsLoading || loadingProgress) || islands.length === 0 ? (
-              <div style={{ display: 'flex', gap: 0, alignItems: 'center', opacity: 0.5 }}>
-                 {[1,2,3,4,5].map(i => (
-                    <div key={i} style={{ width: 340, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
-                      <Skeleton width={180} height={180} borderRadius="50%" style={{ clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)' }} />
-                      <Skeleton width={120} height={24} borderRadius={12} />
-                    </div>
-                 ))}
-              </div>
-            ) : (
-              islands.map((island, index) => (
-                <IslandNode 
-                  key={island.id}
-                  island={island}
-                  index={index}
-                  isFirst={index === 0}
-                  isLast={index === islands.length - 1}
-                  locked={!island.unlocked}
-                  completed={island.completed}
-                  active={island.unlocked && !island.completed}
-                  onClick={() => navigate(`/islands/${island.id}`)}
-                />
-              ))
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            {showLeftArrow && (
+              <button
+                onClick={scrollLeft}
+                style={{
+                  position: 'absolute',
+                  left: 20,
+                  zIndex: 20,
+                  background: 'rgba(56,189,248,0.3)',
+                  border: '1.5px solid rgba(255,255,255,0.3)',
+                  borderRadius: '50%',
+                  width: 44,
+                  height: 44,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: 'white',
+                  backdropFilter: 'blur(8px)',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(56,189,248,0.5)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(56,189,248,0.3)'}
+              >
+                <ArrowLeft size={20} />
+              </button>
+            )}
+
+            <div 
+              ref={mapContainerRef}
+              onScroll={handleScroll}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                overflowX: 'auto',
+                padding: 'clamp(200px, 40vw, 360px) clamp(40px, 8vw, 80px) 140px',
+                margin: '-120px -24px 0 -24px',
+                width: '100%',
+                WebkitOverflowScrolling: 'touch',
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none',
+                }}
+                className="hide-scrollbar"
+            >
+              {(islandsLoading || loadingProgress) || islands.length === 0 ? (
+                <div style={{ display: 'flex', gap: 0, alignItems: 'center', opacity: 0.5 }}>
+                   {[1,2,3,4,5].map(i => (
+                      <div key={i} style={{ width: 340, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
+                        <Skeleton width={180} height={180} borderRadius="50%" style={{ clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)' }} />
+                        <Skeleton width={120} height={24} borderRadius={12} />
+                      </div>
+                   ))}
+                </div>
+              ) : (
+                islands.map((island, index) => (
+                  <IslandNode 
+                    key={island.id}
+                    island={island}
+                    index={index}
+                    isFirst={index === 0}
+                    isLast={index === islands.length - 1}
+                    locked={!island.unlocked}
+                    completed={island.completed}
+                    active={island.unlocked && !island.completed}
+                    onClick={() => navigate(`/islands/${island.id}`)}
+                  />
+                ))
+              )}
+            </div>
+
+            {showRightArrow && (
+              <button
+                onClick={scrollRight}
+                style={{
+                  position: 'absolute',
+                  right: 20,
+                  zIndex: 20,
+                  background: 'rgba(56,189,248,0.3)',
+                  border: '1.5px solid rgba(255,255,255,0.3)',
+                  borderRadius: '50%',
+                  width: 44,
+                  height: 44,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: 'white',
+                  backdropFilter: 'blur(8px)',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(56,189,248,0.5)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(56,189,248,0.3)'}
+              >
+                <ArrowRight size={20} />
+              </button>
             )}
           </div>
         )}

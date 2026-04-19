@@ -107,11 +107,85 @@ GREETINGS_PROMPTS: list[dict[str, Any]] = [
     },
 ]
 
+REPAIR_PROMPTS: list[dict[str, Any]] = [
+    {
+        "id": "repair-1",
+        "island_id": "repair",
+        "order": 1,
+        "situation": "misunderstanding",
+        "prompt_text": "The NPC signs too fast and you didn't catch it. Signal them to WAIT.",
+        "expected_word": "wait",
+        "acceptable_words": ["wait"],
+        "intent_tag": "repair",
+        "response_type": "repair",
+        "coaching_tip": "Open hand raised like a stop sign, then lower slightly.",
+    },
+    {
+        "id": "repair-2",
+        "island_id": "repair",
+        "order": 2,
+        "situation": "confusion",
+        "prompt_text": "The NPC asks something but you didn't understand. Ask them to SAY it again.",
+        "expected_word": "say",
+        "acceptable_words": ["say"],
+        "intent_tag": "clarify",
+        "response_type": "clarify",
+        "coaching_tip": "Index finger pointing to lips, then rotating outward.",
+    },
+    {
+        "id": "repair-3",
+        "island_id": "repair",
+        "order": 3,
+        "situation": "misunderstanding",
+        "prompt_text": "The NPC misunderstood you. Politely say NO to reset the conversation.",
+        "expected_word": "no",
+        "acceptable_words": ["no"],
+        "intent_tag": "repair",
+        "response_type": "repair",
+        "coaching_tip": "Index and middle fingers tap the thumb rapidly.",
+    },
+    {
+        "id": "repair-4",
+        "island_id": "repair",
+        "order": 4,
+        "situation": "lost",
+        "prompt_text": "You're confused about where the conversation is heading. Ask WHERE.",
+        "expected_word": "where",
+        "acceptable_words": ["where"],
+        "intent_tag": "clarify",
+        "response_type": "clarify",
+        "coaching_tip": "Index finger pointing up, shaking side to side.",
+    },
+    {
+        "id": "repair-5",
+        "island_id": "repair",
+        "order": 5,
+        "situation": "unclear",
+        "prompt_text": "Ask WHO the NPC is talking about because you're lost.",
+        "expected_word": "who",
+        "acceptable_words": ["who"],
+        "intent_tag": "clarify",
+        "response_type": "clarify",
+        "coaching_tip": "Thumb on chin, index finger wiggling up and down.",
+    },
+    {
+        "id": "repair-6",
+        "island_id": "repair",
+        "order": 6,
+        "situation": "confused",
+        "prompt_text": "You need to know WHY the NPC said that. Ask them.",
+        "expected_word": "why",
+        "acceptable_words": ["why"],
+        "intent_tag": "clarify",
+        "response_type": "clarify",
+        "coaching_tip": "Hand at forehead, pulling away into a Y shape.",
+    },
+]
 
 def _validate_prompts_against_vocab() -> None:
     """Fail fast at import time if a prompt references a word the model cannot recognize."""
     missing: list[str] = []
-    for prompt in GREETINGS_PROMPTS:
+    for prompt in GREETINGS_PROMPTS + REPAIR_PROMPTS:
         words = {prompt["expected_word"], *prompt.get("acceptable_words", [])}
         for word in words:
             if word.lower() not in VOCABULARY_BY_ID:
@@ -128,6 +202,7 @@ _validate_prompts_against_vocab()
 
 PROMPTS_BY_ISLAND: dict[str, list[dict[str, Any]]] = {
     GREETINGS_ISLAND_ID: GREETINGS_PROMPTS,
+    "repair": REPAIR_PROMPTS,
 }
 
 
@@ -136,7 +211,8 @@ def get_prompts_for_island(island_id: str) -> list[dict[str, Any]]:
 
 
 def get_prompt(island_id: str, prompt_id: str) -> dict[str, Any] | None:
-    for prompt in PROMPTS_BY_ISLAND.get(island_id, []):
+    actual_island_id = "repair" if prompt_id.startswith("repair-") else island_id
+    for prompt in PROMPTS_BY_ISLAND.get(actual_island_id, []):
         if prompt["id"] == prompt_id:
             return prompt
     return None
