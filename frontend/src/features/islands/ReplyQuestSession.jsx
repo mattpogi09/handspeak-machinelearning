@@ -4,12 +4,14 @@ import {
   X, Circle, CheckCircle2, AlertCircle, ArrowRight, MessageCircle, Trophy, Lightbulb, RefreshCw,
 } from 'lucide-react';
 import Camera from '../../components/Camera';
+import GestureProcessingModal from '../../components/GestureProcessingModal';
 import { useIslands } from '../../contexts/IslandsContext';
 import { startConversationSession, submitConversationAttempt } from './conversationApi';
 
 const CAPTURE_INTERVAL_MS = 250;
 const MIN_FRAMES_FOR_VERIFY = 8;
 const FRAME_BUFFER_SIZE = 20;
+const COUNTDOWN_SECONDS = 3;
 
 const getUserId = () => {
   try {
@@ -30,6 +32,12 @@ export default function ReplyQuestSession() {
   const [prompts, setPrompts] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [recording, setRecording] = useState(false);
+  const [isCountingDown, setIsCountingDown] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const [readyToSubmit, setReadyToSubmit] = useState(false);
+  const [showProcessingModal, setShowProcessingModal] = useState(false);
+  const [processingPhase, setProcessingPhase] = useState('waiting');
+  const [processingMessage, setProcessingMessage] = useState('');
   const [status, setStatus] = useState('Loading Reply Quest...');
   const [bootstrapError, setBootstrapError] = useState(null);
   const [latestResult, setLatestResult] = useState(null);
@@ -40,6 +48,7 @@ export default function ReplyQuestSession() {
   const webcamRef = useRef(null);
   const frameBufferRef = useRef([]);
   const isSubmittingRef = useRef(false);
+  const processingTimersRef = useRef([]);
 
   const currentPrompt = prompts[currentIndex] || null;
 
@@ -67,6 +76,44 @@ export default function ReplyQuestSession() {
     return () => { active = false; };
   }, [islandId]);
 
+  const clearProcessingTimers = useCallback(() => {
+    processingTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    processingTimersRef.current = [];
+  }, []);
+
+  const startProcessingFeedback = useCallback(() => {
+    clearProcessingTimers();
+    setShowProcessingModal(true);
+    setProcessingPhase('waiting');
+    setProcessingMessage('Waiting for your recording package...');
+
+    const readingTimer = window.setTimeout(() => {
+      setProcessingPhase('reading');
+      setProcessingMessage('Reading captured frames...');
+    }, 320);
+    const checkingTimer = window.setTimeout(() => {
+      setProcessingPhase('checking');
+      setProcessingMessage('Checking your gesture...');
+    }, 760);
+
+    processingTimersRef.current.push(readingTimer, checkingTimer);
+  }, [clearProcessingTimers]);
+
+  const finishProcessingFeedback = useCallback((isSuccess, message) => {
+    clearProcessingTimers();
+    setProcessingPhase(isSuccess ? 'success' : 'error');
+    setProcessingMessage(message);
+
+    const closeTimer = window.setTimeout(() => {
+      setShowProcessingModal(false);
+    }, isSuccess ? 900 : 1500);
+    processingTimersRef.current.push(closeTimer);
+  }, [clearProcessingTimers]);
+
+  useEffect(() => () => {
+    clearProcessingTimers();
+  }, [clearProcessingTimers]);
+
   const resetFrameBuffer = useCallback(() => {
     frameBufferRef.current = [];
   }, []);
@@ -79,6 +126,9 @@ export default function ReplyQuestSession() {
   const advanceToNextPrompt = useCallback(() => {
     setLatestResult(null);
     resetFrameBuffer();
+    setReadyToSubmit(false);
+    setIsCountingDown(false);
+    setCountdown(0);
     setStatus('Next prompt — read it, then record your reply.');
     setCurrentIndex((idx) => {
       const nextIdx = idx + 1;
@@ -94,6 +144,8 @@ export default function ReplyQuestSession() {
     }
 
     isSubmittingRef.current = true;
+    setReadyToSubmit(false);
+    startProcessingFeedback();
     setStatus(`Scoring your reply for "${currentPrompt.expected_word.toUpperCase()}"...`);
 
     try {
@@ -131,19 +183,26 @@ export default function ReplyQuestSession() {
           accuracy: response.total_count ? response.correct_count / response.total_count : 0,
         });
       }
+      finishProcessingFeedback(true, 'Gesture checked successfully.');
     } catch (error) {
       setStatus(error.message || 'Scoring failed. Try again.');
+      setReadyToSubmit(true);
+      finishProcessingFeedback(false, error.message || 'Could not submit this recording.');
     } finally {
       isSubmittingRef.current = false;
     }
-  }, [currentPrompt, sessionId]);
+  }, [currentPrompt, finishProcessingFeedback, sessionId, startProcessingFeedback]);
 
-  const handleRecordToggle = useCallback(async () => {
+  const handleRecordToggle = useCallback(() => {
+    if (isSubmittingRef.current || isCountingDown) return;
+
     if (!recording) {
       resetFrameBuffer();
       setLatestResult(null);
-      setStatus('Recording... hold the sign steady.');
-      setRecording(true);
+      setReadyToSubmit(false);
+      setCountdown(COUNTDOWN_SECONDS);
+      setIsCountingDown(true);
+      setStatus(`Get ready... ${COUNTDOWN_SECONDS}`);
       return;
     }
 
@@ -154,6 +213,7 @@ export default function ReplyQuestSession() {
     }
 
     if (frameBufferRef.current.length === 0) {
+      setReadyToSubmit(false);
       setStatus('No frames captured — center your hand in the guide circle and try again.');
       return;
     }
@@ -165,8 +225,25 @@ export default function ReplyQuestSession() {
       }
     }
 
-    await submitCurrentFrames();
-  }, [recording, submitCurrentFrames, takeFrame, resetFrameBuffer]);
+    setReadyToSubmit(true);
+    setStatus('Recording stopped. Press submit to check your reply.');
+  }, [isCountingDown, recording, takeFrame, resetFrameBuffer]);
+
+  useEffect(() => {
+    if (!isCountingDown) return undefined;
+    if (countdown <= 0) {
+      setIsCountingDown(false);
+      setRecording(true);
+      setStatus('Recording... hold the sign steady.');
+      return undefined;
+    }
+
+    const timerId = window.setTimeout(() => {
+      setCountdown((value) => value - 1);
+    }, 1000);
+
+    return () => window.clearTimeout(timerId);
+  }, [countdown, isCountingDown]);
 
   useEffect(() => {
     if (!recording || !currentPrompt) return undefined;
@@ -185,6 +262,9 @@ export default function ReplyQuestSession() {
   useEffect(() => {
     resetFrameBuffer();
     setLatestResult(null);
+    setReadyToSubmit(false);
+    setIsCountingDown(false);
+    setCountdown(0);
   }, [currentPrompt?.id, resetFrameBuffer]);
 
   if (!island) {
@@ -253,14 +333,67 @@ export default function ReplyQuestSession() {
 
           <div style={{ position: 'absolute', top: 16, left: 16, background: recording ? 'rgba(239,68,68,0.9)' : 'rgba(0,0,0,0.55)', borderRadius: 99, padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: recording ? 'white' : '#ef4444', animation: recording ? 'rec-blink 1s ease-in-out infinite' : undefined }} />
-            <span style={{ fontSize: 11, fontWeight: 900, color: 'white', letterSpacing: '0.12em', textTransform: 'uppercase' }}>{recording ? 'Recording' : 'Ready'}</span>
+            <span style={{ fontSize: 11, fontWeight: 900, color: 'white', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+              {isCountingDown ? `Starting ${countdown}` : recording ? 'Recording' : readyToSubmit ? 'Ready to submit' : 'Ready'}
+            </span>
           </div>
+
+          {isCountingDown && (
+            <div style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 9,
+              background: 'rgba(2,10,28,0.45)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+            }}>
+              <div style={{
+                width: 110,
+                height: 110,
+                borderRadius: '50%',
+                border: '2px solid rgba(255,255,255,0.3)',
+                background: 'rgba(0,0,0,0.45)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white',
+                fontSize: 46,
+                fontWeight: 900,
+              }}>
+                {countdown}
+              </div>
+            </div>
+          )}
 
           <div style={{ position: 'absolute', bottom: 28, left: 0, right: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16 }}>
             <button onClick={handleRecordToggle}
-              style={{ width: 80, height: 80, borderRadius: '50%', border: `5px solid ${recording ? '#ef4444' : 'rgba(255,255,255,0.85)'}`, background: recording ? '#ef4444' : 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: recording ? '0 0 0 8px rgba(239,68,68,0.22)' : '0 6px 28px rgba(0,0,0,0.5)' }}>
+              disabled={isCountingDown}
+              style={{ width: 80, height: 80, borderRadius: '50%', border: `5px solid ${recording ? '#ef4444' : 'rgba(255,255,255,0.85)'}`, background: recording ? '#ef4444' : 'white', cursor: isCountingDown ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: recording ? '0 0 0 8px rgba(239,68,68,0.22)' : '0 6px 28px rgba(0,0,0,0.5)', opacity: isCountingDown ? 0.55 : 1 }}>
               <Circle size={30} fill={recording ? 'white' : '#e63946'} color={recording ? 'white' : '#e63946'} />
             </button>
+
+            {readyToSubmit && (
+              <button
+                onClick={() => submitCurrentFrames()}
+                disabled={isSubmittingRef.current || isCountingDown}
+                style={{
+                  border: 'none',
+                  borderRadius: 12,
+                  padding: '12px 16px',
+                  minWidth: 92,
+                  cursor: isSubmittingRef.current || isCountingDown ? 'not-allowed' : 'pointer',
+                  background: 'linear-gradient(135deg,#34d399,#22d3ee)',
+                  color: '#064e3b',
+                  fontWeight: 900,
+                  fontSize: 13,
+                  opacity: isSubmittingRef.current || isCountingDown ? 0.6 : 1,
+                }}
+              >
+                Submit
+              </button>
+            )}
           </div>
         </div>
 
@@ -408,6 +541,13 @@ export default function ReplyQuestSession() {
           </div>
         </div>
       </div>
+
+      <GestureProcessingModal
+        open={showProcessingModal}
+        phase={processingPhase}
+        message={processingMessage}
+        onClose={() => setShowProcessingModal(false)}
+      />
 
       <style>{`@keyframes rec-blink { 0%,100%{opacity:1} 50%{opacity:0.25} }`}</style>
     </div>

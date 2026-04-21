@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom';
 import { X, Circle, ChevronLeft, ChevronRight, Lightbulb, CheckCircle2, RotateCcw } from 'lucide-react';
 import Camera from '../../components/Camera';
+import GestureProcessingModal from '../../components/GestureProcessingModal';
 import { fetchJson, postJson } from '../../lib/api';
 import { findWordIndex, getNextWord, getPreviousWord, normalizeWordEntry } from '../../lib/vocabulary';
 
@@ -10,11 +11,18 @@ const REQUIRED_STREAK = 2;
 const MIN_FRAMES_FOR_VERIFY = 8;
 const FRAME_BUFFER_SIZE = 20;
 const DEFAULT_THRESHOLD = 0.48;
+const COUNTDOWN_SECONDS = 3;
 
 export default function WordPracticeSession() {
   const { wordId } = useParams();
   const navigate = useNavigate();
   const [recording, setRecording] = useState(false);
+  const [isCountingDown, setIsCountingDown] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const [readyToSubmit, setReadyToSubmit] = useState(false);
+  const [showProcessingModal, setShowProcessingModal] = useState(false);
+  const [processingPhase, setProcessingPhase] = useState('waiting');
+  const [processingMessage, setProcessingMessage] = useState('');
   const [words, setWords] = useState([]);
   const [currentWord, setCurrentWord] = useState(null);
   const [status, setStatus] = useState('Ready to verify');
@@ -23,6 +31,7 @@ export default function WordPracticeSession() {
   const webcamRef = useRef(null);
   const isSubmittingRef = useRef(false);
   const frameBufferRef = useRef([]);
+  const processingTimersRef = useRef([]);
 
   const takeFrame = useCallback(() => {
     if (!webcamRef.current) return null;
@@ -63,10 +72,51 @@ export default function WordPracticeSession() {
       }
       setMatchStreak(0);
       setLatestResult(null);
+      setReadyToSubmit(false);
+      setIsCountingDown(false);
+      setCountdown(0);
     }, 450);
   }, [nextWord, navigate]);
 
-  const verifyCurrentFrames = useCallback(async (triggeredByStop = false) => {
+  const clearProcessingTimers = useCallback(() => {
+    processingTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    processingTimersRef.current = [];
+  }, []);
+
+  const startProcessingFeedback = useCallback(() => {
+    clearProcessingTimers();
+    setShowProcessingModal(true);
+    setProcessingPhase('waiting');
+    setProcessingMessage('Waiting for your recording package...');
+
+    const readingTimer = window.setTimeout(() => {
+      setProcessingPhase('reading');
+      setProcessingMessage('Reading captured frames...');
+    }, 320);
+    const checkingTimer = window.setTimeout(() => {
+      setProcessingPhase('checking');
+      setProcessingMessage('Checking your gesture...');
+    }, 760);
+
+    processingTimersRef.current.push(readingTimer, checkingTimer);
+  }, [clearProcessingTimers]);
+
+  const finishProcessingFeedback = useCallback((isSuccess, message) => {
+    clearProcessingTimers();
+    setProcessingPhase(isSuccess ? 'success' : 'error');
+    setProcessingMessage(message);
+
+    const closeTimer = window.setTimeout(() => {
+      setShowProcessingModal(false);
+    }, isSuccess ? 900 : 1500);
+    processingTimersRef.current.push(closeTimer);
+  }, [clearProcessingTimers]);
+
+  useEffect(() => () => {
+    clearProcessingTimers();
+  }, [clearProcessingTimers]);
+
+  const verifyCurrentFrames = useCallback(async (debugOverrideWord = null) => {
     if (isSubmittingRef.current || !currentWord) return;
     if (frameBufferRef.current.length < MIN_FRAMES_FOR_VERIFY) {
       setStatus(`Need ${MIN_FRAMES_FOR_VERIFY - frameBufferRef.current.length} more frame(s) before checking`);
@@ -74,6 +124,8 @@ export default function WordPracticeSession() {
     }
 
     isSubmittingRef.current = true;
+    setReadyToSubmit(false);
+    startProcessingFeedback();
     setStatus(`Checking ${currentWord.label}...`);
 
     try {
@@ -82,23 +134,16 @@ export default function WordPracticeSession() {
         frames: frameBufferRef.current.length ? frameBufferRef.current : ["data:image/jpeg;base64,mock"],
         top_k: 5,
         threshold: DEFAULT_THRESHOLD,
-        ...(typeof triggeredByStop === 'string' ? { debug_override_word: triggeredByStop } : {})
+        ...(debugOverrideWord ? { debug_override_word: debugOverrideWord } : {}),
       });
 
 
       setLatestResult(response);
 
       if (response.is_match) {
-        if (triggeredByStop) {
-          setStatus('Correct sign captured. Advancing...');
-          setMatchStreak(0);
-          advanceToNextWord();
-          return;
-        }
-
         setMatchStreak((value) => {
           const nextValue = value + 1;
-          setStatus(`Match ${nextValue}/${REQUIRED_STREAK}`);
+          setStatus(`Match ${nextValue}/${REQUIRED_STREAK}${nextValue >= REQUIRED_STREAK ? '. Advancing...' : '. Record again then submit.'}`);
           if (nextValue >= REQUIRED_STREAK) {
             advanceToNextWord();
             return 0;
@@ -107,22 +152,29 @@ export default function WordPracticeSession() {
         });
       } else {
         setMatchStreak(0);
-        setStatus(triggeredByStop
-          ? `Not matched. Closest: ${response.best_match}. Try again.`
-          : `Closest: ${response.best_match}`);
+        setStatus(`Not matched. Closest: ${response.best_match}. Try again.`);
       }
+      finishProcessingFeedback(true, 'Gesture checked successfully.');
     } catch (error) {
       setStatus(error.message || 'Verification failed');
       setMatchStreak(0);
+      setReadyToSubmit(true);
+      finishProcessingFeedback(false, error.message || 'Could not submit this recording.');
     } finally {
       isSubmittingRef.current = false;
     }
-  }, [currentWord, advanceToNextWord]);
+  }, [advanceToNextWord, currentWord, finishProcessingFeedback, startProcessingFeedback]);
 
-  const handleRecordToggle = useCallback(async () => {
+  const handleRecordToggle = useCallback(() => {
+    if (isSubmittingRef.current || isCountingDown) return;
+
     if (!recording) {
-      setStatus('Recording... hold the sign steady');
-      setRecording(true);
+      frameBufferRef.current = [];
+      setLatestResult(null);
+      setReadyToSubmit(false);
+      setCountdown(COUNTDOWN_SECONDS);
+      setIsCountingDown(true);
+      setStatus(`Get ready... ${COUNTDOWN_SECONDS}`);
       return;
     }
 
@@ -141,18 +193,39 @@ export default function WordPracticeSession() {
     }
 
     if (frameBufferRef.current.length === 0) {
+      setReadyToSubmit(false);
       setStatus('No frames captured. The guide circle is only a helper, try centering your hand and hold for 1 second.');
       return;
     }
 
-    await verifyCurrentFrames(true);
-  }, [recording, verifyCurrentFrames, takeFrame]);
+    setReadyToSubmit(true);
+    setStatus('Recording stopped. Press submit to verify.');
+  }, [isCountingDown, recording, takeFrame]);
+
+  useEffect(() => {
+    if (!isCountingDown) return undefined;
+    if (countdown <= 0) {
+      setIsCountingDown(false);
+      setRecording(true);
+      setStatus('Recording... hold the sign steady');
+      return undefined;
+    }
+
+    const timerId = window.setTimeout(() => {
+      setCountdown((value) => value - 1);
+    }, 1000);
+
+    return () => window.clearTimeout(timerId);
+  }, [countdown, isCountingDown]);
 
   const goTo = useCallback((idx) => {
     if (!words.length) return;
     const target = words[Math.max(0, Math.min(words.length - 1, idx))];
     navigate(`/practice/${target.id}`, { replace: true });
     setRecording(false);
+    setReadyToSubmit(false);
+    setIsCountingDown(false);
+    setCountdown(0);
     setMatchStreak(0);
     setLatestResult(null);
     setStatus('Ready to verify');
@@ -161,7 +234,7 @@ export default function WordPracticeSession() {
   useEffect(() => {
     if (!recording || !currentWord || !words.length) return undefined;
 
-    const intervalId = window.setInterval(async () => {
+    const intervalId = window.setInterval(() => {
       if (isSubmittingRef.current || !webcamRef.current) return;
 
       const screenshot = takeFrame();
@@ -170,21 +243,25 @@ export default function WordPracticeSession() {
       frameBufferRef.current = [...frameBufferRef.current, screenshot].slice(-FRAME_BUFFER_SIZE);
       if (frameBufferRef.current.length < MIN_FRAMES_FOR_VERIFY) {
         setStatus(`Collecting frames ${frameBufferRef.current.length}/${MIN_FRAMES_FOR_VERIFY}...`);
-        return;
+      } else {
+        setStatus(`Frames ready ${frameBufferRef.current.length}/${MIN_FRAMES_FOR_VERIFY}. Tap stop when done.`);
       }
-
-      await verifyCurrentFrames(false);
     }, CAPTURE_INTERVAL_MS);
 
     return () => window.clearInterval(intervalId);
-  }, [recording, currentWord, words.length, verifyCurrentFrames, takeFrame]);
+  }, [recording, currentWord, words.length, takeFrame]);
 
   useEffect(() => {
     frameBufferRef.current = [];
     setMatchStreak(0);
     setLatestResult(null);
     setStatus('Ready to verify');
-  }, [currentWord?.id]);
+    setReadyToSubmit(false);
+    setIsCountingDown(false);
+    setCountdown(0);
+    clearProcessingTimers();
+    setShowProcessingModal(false);
+  }, [clearProcessingTimers, currentWord?.id]);
 
   if (!currentWord) {
     return (
@@ -242,8 +319,39 @@ export default function WordPracticeSession() {
 
           <div style={{ position: 'absolute', top: 16, left: 16, background: recording ? 'rgba(239,68,68,0.9)' : 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', borderRadius: 99, padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 6, transition: 'background 0.3s' }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: recording ? 'white' : '#ef4444', animation: recording ? 'rec-blink 1s ease-in-out infinite' : undefined }} />
-            <span style={{ fontSize: 11, fontWeight: 900, color: 'white', letterSpacing: '0.12em', textTransform: 'uppercase' }}>{recording ? 'Recording' : 'Camera'}</span>
+            <span style={{ fontSize: 11, fontWeight: 900, color: 'white', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+              {isCountingDown ? `Starting ${countdown}` : recording ? 'Recording' : readyToSubmit ? 'Ready to submit' : 'Camera'}
+            </span>
           </div>
+
+          {isCountingDown && (
+            <div style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 9,
+              background: 'rgba(2,10,28,0.45)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+            }}>
+              <div style={{
+                width: 110,
+                height: 110,
+                borderRadius: '50%',
+                border: '2px solid rgba(255,255,255,0.3)',
+                background: 'rgba(0,0,0,0.45)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white',
+                fontSize: 46,
+                fontWeight: 900,
+              }}>
+                {countdown}
+              </div>
+            </div>
+          )}
 
           <div style={{ position: 'absolute', bottom: 28, left: 0, right: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16 }}>
             <button onClick={() => previousWord && goTo(currentIndex - 1)} disabled={!previousWord}
@@ -252,9 +360,31 @@ export default function WordPracticeSession() {
             </button>
 
             <button onClick={handleRecordToggle}
-              style={{ width: 80, height: 80, borderRadius: '50%', border: `5px solid ${recording ? '#ef4444' : 'rgba(255,255,255,0.85)'}`, background: recording ? '#ef4444' : 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: recording ? '0 0 0 8px rgba(239,68,68,0.22), 0 6px 28px rgba(0,0,0,0.5)' : '0 6px 28px rgba(0,0,0,0.5)', transition: 'all 0.25s cubic-bezier(0.34,1.56,0.64,1)' }}>
+              disabled={isCountingDown}
+              style={{ width: 80, height: 80, borderRadius: '50%', border: `5px solid ${recording ? '#ef4444' : 'rgba(255,255,255,0.85)'}`, background: recording ? '#ef4444' : 'white', cursor: isCountingDown ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: recording ? '0 0 0 8px rgba(239,68,68,0.22), 0 6px 28px rgba(0,0,0,0.5)' : '0 6px 28px rgba(0,0,0,0.5)', transition: 'all 0.25s cubic-bezier(0.34,1.56,0.64,1)', opacity: isCountingDown ? 0.55 : 1 }}>
               <Circle size={30} fill={recording ? 'white' : '#e63946'} color={recording ? 'white' : '#e63946'} />
             </button>
+
+            {readyToSubmit && (
+              <button
+                onClick={() => verifyCurrentFrames()}
+                disabled={isSubmittingRef.current || isCountingDown}
+                style={{
+                  border: 'none',
+                  borderRadius: 12,
+                  padding: '11px 14px',
+                  minWidth: 86,
+                  cursor: isSubmittingRef.current || isCountingDown ? 'not-allowed' : 'pointer',
+                  background: 'linear-gradient(135deg,#34d399,#22d3ee)',
+                  color: '#064e3b',
+                  fontWeight: 900,
+                  fontSize: 12.5,
+                  opacity: isSubmittingRef.current || isCountingDown ? 0.6 : 1,
+                }}
+              >
+                Submit
+              </button>
+            )}
 
             <button onClick={() => nextWord && goTo(currentIndex + 1)} disabled={!nextWord}
               style={{ width: 44, height: 44, borderRadius: '50%', background: !nextWord ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)', border: '2px solid rgba(255,255,255,0.3)', cursor: !nextWord ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: !nextWord ? 0.45 : 1, transition: 'all 0.2s' }}>
@@ -312,11 +442,18 @@ export default function WordPracticeSession() {
             ))}
           </div>
 
-          <button onClick={() => { setRecording(false); frameBufferRef.current = []; setMatchStreak(0); setLatestResult(null); setStatus('Ready to verify'); }} style={{ marginTop: 6, border: 'none', borderRadius: 14, padding: '12px 14px', cursor: 'pointer', background: 'rgba(255,255,255,0.1)', color: 'white', fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <button onClick={() => { setRecording(false); setReadyToSubmit(false); setIsCountingDown(false); setCountdown(0); frameBufferRef.current = []; setMatchStreak(0); setLatestResult(null); setStatus('Ready to verify'); }} style={{ marginTop: 6, border: 'none', borderRadius: 14, padding: '12px 14px', cursor: 'pointer', background: 'rgba(255,255,255,0.1)', color: 'white', fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             <RotateCcw size={14} /> Reset Session
           </button>
         </div>
       </div>
+
+      <GestureProcessingModal
+        open={showProcessingModal}
+        phase={processingPhase}
+        message={processingMessage}
+        onClose={() => setShowProcessingModal(false)}
+      />
 
       <style>{`
         @keyframes rec-blink { 0%,100%{opacity:1} 50%{opacity:0.25} }

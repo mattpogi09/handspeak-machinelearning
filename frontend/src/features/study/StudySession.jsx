@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { X, Circle, ArrowRight, CheckCircle, Lock, Star, Lightbulb, Waves } from 'lucide-react';
 import Camera from '../../components/Camera';
+import GestureProcessingModal from '../../components/GestureProcessingModal';
 import { postJson } from '../../lib/api';
 import {
   getInitialStudyProgress,
@@ -23,12 +24,19 @@ const LETTER_FRAME_BUFFER_SIZE = 5;
 const WORD_FRAME_BUFFER_SIZE = 20;
 const LETTER_THRESHOLD = 0.66;
 const WORD_THRESHOLD = 0.48;
+const COUNTDOWN_SECONDS = 3;
 
 export default function StudySession() {
   const { islandId, levelId } = useParams();
   const navigate = useNavigate();
   const { getIslandById } = useIslands();
   const [recording, setRecording] = useState(false);
+  const [isCountingDown, setIsCountingDown] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const [readyToSubmit, setReadyToSubmit] = useState(false);
+  const [showProcessingModal, setShowProcessingModal] = useState(false);
+  const [processingPhase, setProcessingPhase] = useState('waiting');
+  const [processingMessage, setProcessingMessage] = useState('');
   const [progress, setProgress] = useState(getInitialStudyProgress());
   const [showSuccess, setShowSuccess] = useState(false);
   const [imgOk, setImgOk] = useState(true);
@@ -39,6 +47,7 @@ export default function StudySession() {
   const webcamRef = useRef(null);
   const frameBufferRef = useRef([]);
   const isSubmittingRef = useRef(false);
+  const processingTimersRef = useRef([]);
 
   const takeFrame = useCallback(() => {
     if (!webcamRef.current) return null;
@@ -114,7 +123,45 @@ export default function StudySession() {
   const frameBufferSize = isLetterTarget ? LETTER_FRAME_BUFFER_SIZE : WORD_FRAME_BUFFER_SIZE;
   const captureIntervalMs = isLetterTarget ? LETTER_CAPTURE_INTERVAL_MS : WORD_CAPTURE_INTERVAL_MS;
 
-  const verifyCurrentFrames = useCallback(async (triggeredByStop = false) => {
+  const clearProcessingTimers = useCallback(() => {
+    processingTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    processingTimersRef.current = [];
+  }, []);
+
+  const startProcessingFeedback = useCallback(() => {
+    clearProcessingTimers();
+    setShowProcessingModal(true);
+    setProcessingPhase('waiting');
+    setProcessingMessage('Waiting for your recording package...');
+
+    const readingTimer = window.setTimeout(() => {
+      setProcessingPhase('reading');
+      setProcessingMessage('Reading captured frames...');
+    }, 320);
+    const checkingTimer = window.setTimeout(() => {
+      setProcessingPhase('checking');
+      setProcessingMessage('Checking your gesture...');
+    }, 760);
+
+    processingTimersRef.current.push(readingTimer, checkingTimer);
+  }, [clearProcessingTimers]);
+
+  const finishProcessingFeedback = useCallback((isSuccess, message) => {
+    clearProcessingTimers();
+    setProcessingPhase(isSuccess ? 'success' : 'error');
+    setProcessingMessage(message);
+
+    const closeTimer = window.setTimeout(() => {
+      setShowProcessingModal(false);
+    }, isSuccess ? 900 : 1500);
+    processingTimersRef.current.push(closeTimer);
+  }, [clearProcessingTimers]);
+
+  useEffect(() => () => {
+    clearProcessingTimers();
+  }, [clearProcessingTimers]);
+
+  const verifyCurrentFrames = useCallback(async (debugOverrideWord = null) => {
     if (isSubmittingRef.current || !targetWord || !levelUnlocked) return;
     if (frameBufferRef.current.length < minFramesForVerify) {
       setStatus(`Need ${minFramesForVerify - frameBufferRef.current.length} more frame(s) before checking`);
@@ -122,6 +169,8 @@ export default function StudySession() {
     }
 
     isSubmittingRef.current = true;
+    setReadyToSubmit(false);
+    startProcessingFeedback();
     setStatus(`Checking ${panelTitle}...`);
 
     try {
@@ -130,22 +179,15 @@ export default function StudySession() {
         frames: frameBufferRef.current,
         top_k: 5,
         threshold: verifyThreshold,
+        ...(debugOverrideWord && { debug_override_word: debugOverrideWord }),
       });
 
       setLatestResult(response);
 
       if (response.is_match) {
-        if (triggeredByStop) {
-          setStatus('Correct sign captured. Completing level...');
-          setMatchStreak(0);
-          setRecording(false);
-          markComplete();
-          return;
-        }
-
         setMatchStreak((value) => {
           const next = value + 1;
-          setStatus(`Correct sign ${next}/${REQUIRED_STREAK}`);
+          setStatus(`Correct sign ${next}/${REQUIRED_STREAK}. ${next >= REQUIRED_STREAK ? 'Completing level...' : 'Record again then submit.'}`);
           if (next >= REQUIRED_STREAK) {
             setRecording(false);
             markComplete();
@@ -155,27 +197,34 @@ export default function StudySession() {
         });
       } else {
         setMatchStreak(0);
-        setStatus(triggeredByStop
-          ? `Not matched. Closest match: ${response.best_match}`
-          : `Not yet. Closest match: ${response.best_match}`);
+        setStatus(`Not matched. Closest match: ${response.best_match}`);
       }
+      finishProcessingFeedback(true, 'Gesture checked successfully.');
     } catch (error) {
       setMatchStreak(0);
       setStatus(error.message || 'Verification failed');
+      setReadyToSubmit(true);
+      finishProcessingFeedback(false, error.message || 'Could not submit this recording.');
     } finally {
       isSubmittingRef.current = false;
     }
-  }, [targetWord, levelUnlocked, panelTitle, verifyThreshold, minFramesForVerify, verifyEndpoint, verifyModelType]);
+  }, [targetWord, levelUnlocked, minFramesForVerify, panelTitle, verifyEndpoint, verifyThreshold, finishProcessingFeedback, startProcessingFeedback]);
 
-  const handleRecordToggle = useCallback(async () => {
+  const handleRecordToggle = useCallback(() => {
     if (!levelUnlocked) {
       setStatus('This level is locked. Complete previous levels first.');
       return;
     }
+    if (isSubmittingRef.current || isCountingDown || showSuccess) return;
 
     if (!recording) {
-      setStatus('Recording... hold the sign steady');
-      setRecording(true);
+      frameBufferRef.current = [];
+      setCapturedFrames(0);
+      setLatestResult(null);
+      setReadyToSubmit(false);
+      setCountdown(COUNTDOWN_SECONDS);
+      setIsCountingDown(true);
+      setStatus(`Get ready... ${COUNTDOWN_SECONDS}`);
       return;
     }
 
@@ -196,12 +245,30 @@ export default function StudySession() {
     }
 
     if (frameBufferRef.current.length === 0) {
+      setReadyToSubmit(false);
       setStatus('No frames captured. The guide circle is only a helper, try centering your hand and hold for 1 second.');
       return;
     }
 
-    await verifyCurrentFrames(true);
-  }, [recording, verifyCurrentFrames, takeFrame, frameBufferSize, minFramesForVerify, levelUnlocked]);
+    setReadyToSubmit(true);
+    setStatus('Recording stopped. Press submit to verify.');
+  }, [frameBufferSize, levelUnlocked, minFramesForVerify, recording, showSuccess, takeFrame, isCountingDown]);
+
+  useEffect(() => {
+    if (!isCountingDown) return undefined;
+    if (countdown <= 0) {
+      setIsCountingDown(false);
+      setRecording(true);
+      setStatus('Recording... hold the sign steady');
+      return undefined;
+    }
+
+    const timerId = window.setTimeout(() => {
+      setCountdown((value) => value - 1);
+    }, 1000);
+
+    return () => window.clearTimeout(timerId);
+  }, [countdown, isCountingDown]);
 
   useEffect(() => {
     frameBufferRef.current = [];
@@ -210,12 +277,17 @@ export default function StudySession() {
     setLatestResult(null);
     setStatus('Ready to verify');
     setRecording(false);
-  }, [levelId]);
+    setReadyToSubmit(false);
+    setIsCountingDown(false);
+    setCountdown(0);
+    clearProcessingTimers();
+    setShowProcessingModal(false);
+  }, [clearProcessingTimers, levelId]);
 
   useEffect(() => {
     if (!recording || !levelUnlocked || !targetWord) return undefined;
 
-    const intervalId = window.setInterval(async () => {
+    const intervalId = window.setInterval(() => {
       if (isSubmittingRef.current || !webcamRef.current) return;
 
       const screenshot = takeFrame();
@@ -226,24 +298,26 @@ export default function StudySession() {
 
       if (frameBufferRef.current.length < minFramesForVerify) {
         setStatus(`Collecting frames ${frameBufferRef.current.length}/${minFramesForVerify}...`);
-        return;
+      } else {
+        setStatus(`Frames ready ${frameBufferRef.current.length}/${minFramesForVerify}. Tap stop when done.`);
       }
-
-      await verifyCurrentFrames(false);
     }, captureIntervalMs);
 
     return () => window.clearInterval(intervalId);
-  }, [recording, levelUnlocked, verifyCurrentFrames, takeFrame, frameBufferSize, minFramesForVerify, captureIntervalMs]);
+  }, [recording, levelUnlocked, targetWord, takeFrame, frameBufferSize, minFramesForVerify, captureIntervalMs]);
 
   useEffect(() => {
-    if (!recording && !showSuccess && !alreadyCompleted && status === 'Ready to verify') {
-      setStatus('Recording stopped. Press record to continue.');
+    if (!recording && !isCountingDown && !showSuccess && !alreadyCompleted && !readyToSubmit && status === 'Ready to verify') {
+      setStatus('Tap record to start.');
     }
-  }, [recording, showSuccess, alreadyCompleted, status]);
+  }, [recording, isCountingDown, showSuccess, alreadyCompleted, readyToSubmit, status]);
 
   const markComplete = () => {
     if (!levelUnlocked || alreadyCompleted) return;
 
+    setReadyToSubmit(false);
+    setIsCountingDown(false);
+    setCountdown(0);
     const updated = completeIslandLevel(progress, island.id, activeLevel.id);
     setProgress(updated);
     saveStudyProgress(updated);
@@ -388,25 +462,77 @@ export default function StudySession() {
               animation: recording ? 'rec-blink 1s ease-in-out infinite' : undefined,
             }} />
             <span style={{ fontSize: 11, fontWeight: 900, color: 'white', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-              {recording ? 'Recording' : 'Camera'}
+              {isCountingDown ? `Starting ${countdown}` : recording ? 'Recording' : readyToSubmit ? 'Ready to submit' : 'Camera'}
             </span>
           </div>
 
-          {/* record button */}
-          <button onClick={handleRecordToggle}
-            style={{
-              position: 'absolute', bottom: 28, left: '50%', transform: 'translateX(-50%)',
-              width: 80, height: 80, borderRadius: '50%',
-              border: `5px solid ${recording ? '#ef4444' : 'rgba(255,255,255,0.9)'}`,
-              background: recording ? '#ef4444' : 'white',
-              cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: recording ? '0 0 0 8px rgba(239,68,68,0.25), 0 6px 28px rgba(0,0,0,0.5)' : '0 6px 28px rgba(0,0,0,0.5)',
-              transition: 'all 0.25s cubic-bezier(0.34,1.56,0.64,1)',
-            }}
-          >
-            <Circle size={32} fill={recording ? 'white' : '#e63946'} color={recording ? 'white' : '#e63946'} />
-          </button>
+          {isCountingDown && (
+            <div style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 9,
+              background: 'rgba(2,10,28,0.45)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+            }}>
+              <div style={{
+                width: 110,
+                height: 110,
+                borderRadius: '50%',
+                border: '2px solid rgba(255,255,255,0.3)',
+                background: 'rgba(0,0,0,0.45)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white',
+                fontSize: 46,
+                fontWeight: 900,
+              }}>
+                {countdown}
+              </div>
+            </div>
+          )}
+
+          <div style={{ position: 'absolute', bottom: 28, left: 0, right: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12 }}>
+            <button onClick={handleRecordToggle}
+              disabled={isCountingDown || showSuccess}
+              style={{
+                width: 80, height: 80, borderRadius: '50%',
+                border: `5px solid ${recording ? '#ef4444' : 'rgba(255,255,255,0.9)'}`,
+                background: recording ? '#ef4444' : 'white',
+                cursor: isCountingDown || showSuccess ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: recording ? '0 0 0 8px rgba(239,68,68,0.25), 0 6px 28px rgba(0,0,0,0.5)' : '0 6px 28px rgba(0,0,0,0.5)',
+                transition: 'all 0.25s cubic-bezier(0.34,1.56,0.64,1)',
+                opacity: isCountingDown || showSuccess ? 0.55 : 1,
+              }}
+            >
+              <Circle size={32} fill={recording ? 'white' : '#e63946'} color={recording ? 'white' : '#e63946'} />
+            </button>
+
+            {readyToSubmit && !showSuccess && (
+              <button
+                onClick={() => verifyCurrentFrames()}
+                disabled={isSubmittingRef.current || isCountingDown}
+                style={{
+                  border: 'none',
+                  borderRadius: 12,
+                  padding: '12px 16px',
+                  minWidth: 92,
+                  cursor: isSubmittingRef.current || isCountingDown ? 'not-allowed' : 'pointer',
+                  background: 'linear-gradient(135deg,#34d399,#22d3ee)',
+                  color: '#064e3b',
+                  fontWeight: 900,
+                  fontSize: 13,
+                  opacity: isSubmittingRef.current || isCountingDown ? 0.6 : 1,
+                }}
+              >
+                Submit
+              </button>
+            )}
+          </div>
 
           <div style={{
             position: 'absolute', bottom: 122, left: '50%', transform: 'translateX(-50%)',
@@ -601,6 +727,13 @@ export default function StudySession() {
           </button>
         </div>
       </div>
+
+      <GestureProcessingModal
+        open={showProcessingModal}
+        phase={processingPhase}
+        message={processingMessage}
+        onClose={() => setShowProcessingModal(false)}
+      />
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap');

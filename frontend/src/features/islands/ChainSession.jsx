@@ -5,12 +5,14 @@ import {
   Trophy, Lightbulb, ChevronDown,
 } from 'lucide-react';
 import Camera from '../../components/Camera';
+import GestureProcessingModal from '../../components/GestureProcessingModal';
 import { useIslands } from '../../contexts/IslandsContext';
 import { listIslandChains, startChainSession, submitChainTurn } from './conversationApi';
 
 const CAPTURE_INTERVAL_MS = 250;
 const MIN_FRAMES_FOR_VERIFY = 8;
 const FRAME_BUFFER_SIZE = 20;
+const COUNTDOWN_SECONDS = 3;
 
 const RESPONSE_TYPE_LABELS = {
   'greet-open': 'Greeting opener',
@@ -55,12 +57,19 @@ export default function ChainSession() {
 
   // UI state
   const [recording, setRecording] = useState(false);
+  const [isCountingDown, setIsCountingDown] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const [readyToSubmit, setReadyToSubmit] = useState(false);
+  const [showProcessingModal, setShowProcessingModal] = useState(false);
+  const [processingPhase, setProcessingPhase] = useState('waiting');
+  const [processingMessage, setProcessingMessage] = useState('');
   const [status, setStatus] = useState('');
   const [bootstrapError, setBootstrapError] = useState(null);
 
   const webcamRef = useRef(null);
   const frameBufferRef = useRef([]);
   const isSubmittingRef = useRef(false);
+  const processingTimersRef = useRef([]);
 
   const currentTurn = turnsSnapshot[currentTurnIndex] || null;
   const totalTurns = turnsSnapshot.length;
@@ -93,11 +102,52 @@ export default function ChainSession() {
       setTurnsSnapshot(snapshot);
       setCurrentTurnIndex(0);
       setAttemptsRemaining(session.max_attempts_per_turn ?? 2);
+      setReadyToSubmit(false);
+      setIsCountingDown(false);
+      setCountdown(0);
       setStatus('Read the NPC line, then record your reply.');
     } catch (err) {
       setBootstrapError(err.message || 'Failed to start conversation.');
     }
   }, [islandId]);
+
+  const clearProcessingTimers = useCallback(() => {
+    processingTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    processingTimersRef.current = [];
+  }, []);
+
+  const startProcessingFeedback = useCallback(() => {
+    clearProcessingTimers();
+    setShowProcessingModal(true);
+    setProcessingPhase('waiting');
+    setProcessingMessage('Waiting for your recording package...');
+
+    const readingTimer = window.setTimeout(() => {
+      setProcessingPhase('reading');
+      setProcessingMessage('Reading captured frames...');
+    }, 320);
+    const checkingTimer = window.setTimeout(() => {
+      setProcessingPhase('checking');
+      setProcessingMessage('Checking your gesture...');
+    }, 760);
+
+    processingTimersRef.current.push(readingTimer, checkingTimer);
+  }, [clearProcessingTimers]);
+
+  const finishProcessingFeedback = useCallback((isSuccess, message) => {
+    clearProcessingTimers();
+    setProcessingPhase(isSuccess ? 'success' : 'error');
+    setProcessingMessage(message);
+
+    const closeTimer = window.setTimeout(() => {
+      setShowProcessingModal(false);
+    }, isSuccess ? 900 : 1500);
+    processingTimersRef.current.push(closeTimer);
+  }, [clearProcessingTimers]);
+
+  useEffect(() => () => {
+    clearProcessingTimers();
+  }, [clearProcessingTimers]);
 
   const resetFrameBuffer = useCallback(() => { frameBufferRef.current = []; }, []);
 
@@ -113,6 +163,8 @@ export default function ChainSession() {
     }
 
     isSubmittingRef.current = true;
+    setReadyToSubmit(false);
+    startProcessingFeedback();
     setStatus(`Scoring your reply for "${currentTurn.expected_word.toUpperCase()}"...`);
 
     try {
@@ -141,19 +193,26 @@ export default function ChainSession() {
       if (result.is_chain_complete && result.chain_summary) {
         setChainSummary(result.chain_summary);
       }
+      finishProcessingFeedback(true, 'Gesture checked successfully.');
     } catch (err) {
       setStatus(err.message || 'Scoring failed. Try again.');
+      setReadyToSubmit(true);
+      finishProcessingFeedback(false, err.message || 'Could not submit this recording.');
     } finally {
       isSubmittingRef.current = false;
     }
-  }, [chainSessionId, currentTurnIndex, currentTurn]);
+  }, [chainSessionId, currentTurnIndex, currentTurn, finishProcessingFeedback, startProcessingFeedback]);
 
-  const handleRecordToggle = useCallback(async () => {
+  const handleRecordToggle = useCallback(() => {
+    if (isSubmittingRef.current || latestTurnResult?.should_advance || isCountingDown) return;
+
     if (!recording) {
       resetFrameBuffer();
       setLatestTurnResult(null);
-      setStatus('Recording... hold the sign steady.');
-      setRecording(true);
+      setReadyToSubmit(false);
+      setCountdown(COUNTDOWN_SECONDS);
+      setIsCountingDown(true);
+      setStatus(`Get ready... ${COUNTDOWN_SECONDS}`);
       return;
     }
 
@@ -162,14 +221,34 @@ export default function ChainSession() {
     if (last) frameBufferRef.current = [...frameBufferRef.current, last].slice(-FRAME_BUFFER_SIZE);
 
     if (!frameBufferRef.current.length) {
+      setReadyToSubmit(false);
       setStatus('No frames — center your hand in the guide circle and try again.');
       return;
     }
+
     while (frameBufferRef.current.length < MIN_FRAMES_FOR_VERIFY) {
       frameBufferRef.current.push(frameBufferRef.current[frameBufferRef.current.length - 1]);
     }
-    await submitCurrentFrames();
-  }, [recording, submitCurrentFrames, takeFrame, resetFrameBuffer]);
+
+    setReadyToSubmit(true);
+    setStatus('Recording stopped. Press submit to check your reply.');
+  }, [isCountingDown, latestTurnResult?.should_advance, recording, takeFrame, resetFrameBuffer]);
+
+  useEffect(() => {
+    if (!isCountingDown) return undefined;
+    if (countdown <= 0) {
+      setIsCountingDown(false);
+      setRecording(true);
+      setStatus('Recording... hold the sign steady.');
+      return undefined;
+    }
+
+    const timerId = window.setTimeout(() => {
+      setCountdown((value) => value - 1);
+    }, 1000);
+
+    return () => window.clearTimeout(timerId);
+  }, [countdown, isCountingDown]);
 
   useEffect(() => {
     if (!recording || !currentTurn) return undefined;
@@ -191,6 +270,9 @@ export default function ChainSession() {
     setCurrentTurnIndex(next);
     setLatestTurnResult(null);
     setAttemptsRemaining(selectedChain?.max_attempts_per_turn ?? 2);
+    setReadyToSubmit(false);
+    setIsCountingDown(false);
+    setCountdown(0);
     resetFrameBuffer();
     setStatus('Next turn — read the NPC line and record your reply.');
   }, [latestTurnResult, currentTurnIndex, selectedChain, resetFrameBuffer]);
@@ -291,14 +373,67 @@ export default function ChainSession() {
 
           <div style={{ position: 'absolute', top: 16, left: 16, background: recording ? 'rgba(239,68,68,0.9)' : 'rgba(0,0,0,0.55)', borderRadius: 99, padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: recording ? 'white' : '#ef4444', animation: recording ? 'rec-blink 1s ease-in-out infinite' : undefined }} />
-            <span style={{ fontSize: 11, fontWeight: 900, color: 'white', letterSpacing: '0.12em', textTransform: 'uppercase' }}>{recording ? 'Recording' : 'Ready'}</span>
+            <span style={{ fontSize: 11, fontWeight: 900, color: 'white', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+              {isCountingDown ? `Starting ${countdown}` : recording ? 'Recording' : readyToSubmit ? 'Ready to submit' : 'Ready'}
+            </span>
           </div>
-          <div style={{ position: 'absolute', bottom: 28, left: 0, right: 0, display: 'flex', justifyContent: 'center' }}>
+
+          {isCountingDown && (
+            <div style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 9,
+              background: 'rgba(2,10,28,0.45)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+            }}>
+              <div style={{
+                width: 110,
+                height: 110,
+                borderRadius: '50%',
+                border: '2px solid rgba(255,255,255,0.3)',
+                background: 'rgba(0,0,0,0.45)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white',
+                fontSize: 46,
+                fontWeight: 900,
+              }}>
+                {countdown}
+              </div>
+            </div>
+          )}
+
+          <div style={{ position: 'absolute', bottom: 28, left: 0, right: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12 }}>
             <button onClick={handleRecordToggle}
-              disabled={!!latestTurnResult?.should_advance}
-              style={{ width: 80, height: 80, borderRadius: '50%', border: `5px solid ${recording ? '#ef4444' : 'rgba(255,255,255,0.85)'}`, background: recording ? '#ef4444' : 'white', cursor: latestTurnResult?.should_advance ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: recording ? '0 0 0 8px rgba(239,68,68,0.22)' : '0 6px 28px rgba(0,0,0,0.5)', opacity: latestTurnResult?.should_advance ? 0.5 : 1 }}>
+              disabled={!!latestTurnResult?.should_advance || isCountingDown}
+              style={{ width: 80, height: 80, borderRadius: '50%', border: `5px solid ${recording ? '#ef4444' : 'rgba(255,255,255,0.85)'}`, background: recording ? '#ef4444' : 'white', cursor: latestTurnResult?.should_advance || isCountingDown ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: recording ? '0 0 0 8px rgba(239,68,68,0.22)' : '0 6px 28px rgba(0,0,0,0.5)', opacity: latestTurnResult?.should_advance || isCountingDown ? 0.5 : 1 }}>
               <Circle size={30} fill={recording ? 'white' : '#e63946'} color={recording ? 'white' : '#e63946'} />
             </button>
+
+            {readyToSubmit && !latestTurnResult?.should_advance && (
+              <button
+                onClick={() => submitCurrentFrames()}
+                disabled={isSubmittingRef.current || isCountingDown}
+                style={{
+                  border: 'none',
+                  borderRadius: 12,
+                  padding: '12px 16px',
+                  minWidth: 92,
+                  cursor: isSubmittingRef.current || isCountingDown ? 'not-allowed' : 'pointer',
+                  background: 'linear-gradient(135deg,#34d399,#22d3ee)',
+                  color: '#064e3b',
+                  fontWeight: 900,
+                  fontSize: 13,
+                  opacity: isSubmittingRef.current || isCountingDown ? 0.6 : 1,
+                }}
+              >
+                Submit
+              </button>
+            )}
           </div>
         </div>
 
@@ -462,6 +597,12 @@ export default function ChainSession() {
           </div>
         </div>
       </div>
+      <GestureProcessingModal
+        open={showProcessingModal}
+        phase={processingPhase}
+        message={processingMessage}
+        onClose={() => setShowProcessingModal(false)}
+      />
       <style>{`@keyframes rec-blink { 0%,100%{opacity:1} 50%{opacity:0.25} }`}</style>
     </div>
   );
