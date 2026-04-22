@@ -216,7 +216,7 @@ Acceptance criteria:
 
 ---
 
-## Phase 6 - Clarification and repair drills
+## Phase 6 - Clarification and repair drills (done)
 
 Objective:
 Implement misunderstanding recovery practice as a first-class feature.

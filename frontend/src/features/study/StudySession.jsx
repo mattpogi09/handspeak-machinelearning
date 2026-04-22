@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import YouTubeTutorial from '../../components/YouTubeTutorial';
 import { useParams, useNavigate } from 'react-router-dom';
 import { X, Circle, ArrowRight, CheckCircle, Lock, Star, Lightbulb, Waves } from 'lucide-react';
 import Camera from '../../components/Camera';
@@ -39,7 +40,6 @@ export default function StudySession() {
   const [processingMessage, setProcessingMessage] = useState('');
   const [progress, setProgress] = useState(getInitialStudyProgress());
   const [showSuccess, setShowSuccess] = useState(false);
-  const [imgOk, setImgOk] = useState(true);
   const [status, setStatus] = useState('Ready to verify');
   const [latestResult, setLatestResult] = useState(null);
   const [matchStreak, setMatchStreak] = useState(0);
@@ -74,8 +74,6 @@ export default function StudySession() {
     };
   }, []);
 
-  useEffect(() => { setImgOk(true); }, [levelId]);
-
   const handleClose = useCallback(() => {
     if (!island) { navigate('/study'); return; }
     navigate(`/study/${island.id}`);
@@ -107,12 +105,6 @@ export default function StudySession() {
   const panelTitle = activeLevel.label;
   const panelDescription = activeLevel.description;
   const panelTip = activeLevel.tip;
-
-  /* ASL phrase image — Lifeprint vocabulary GIFs */
-  const phraseId = phraseLevel?.phraseId || '';
-  const phraseImgSrc = phraseId
-    ? `https://www.lifeprint.com/asl101/gifs-animated/${phraseId.replace('_', '-')}.gif`
-    : null;
 
   const targetWord = phraseLevel?.label ? String(phraseLevel.label).replace(/\s+/g, '').toUpperCase() : '';
   const isLetterTarget = targetWord.length === 1;
@@ -589,37 +581,7 @@ export default function StudySession() {
 
           <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', flexShrink: 0 }} />
 
-          {/* ASL hand sign reference image */}
-          <div>
-            <p style={{ margin: '0 0 7px', fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.15em' }}>
-              Hand Sign Reference
-            </p>
-            <div style={{
-              borderRadius: 18, overflow: 'hidden',
-              background: 'rgba(255,255,255,0.95)',
-              border: '2px solid rgba(255,255,255,0.2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              height: 150, flexShrink: 0,
-              boxShadow: '0 6px 20px rgba(0,0,0,0.28)',
-            }}>
-              {phraseImgSrc && imgOk ? (
-                <img
-                  key={phraseId}
-                  src={phraseImgSrc}
-                  alt={`ASL sign for ${activeLevel.label}`}
-                  style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain' }}
-                  onError={() => setImgOk(false)}
-                />
-              ) : (
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 48, fontWeight: 900, color: '#0ea5e9', lineHeight: 1 }}>
-                    {activeLevel.label}
-                  </div>
-                  <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, marginTop: 5 }}>ASL Sign</div>
-                </div>
-              )}
-            </div>
-          </div>
+          <YouTubeTutorial word={activeLevel.label} isLetter={isLetterTarget} />
 
           {/* description */}
           <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.82)', lineHeight: 1.65, margin: 0 }}>

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import YouTubeTutorial from '../../components/YouTubeTutorial';
 import { useNavigate, useParams } from 'react-router-dom';
 import { X, Circle, ChevronLeft, ChevronRight, Lightbulb, CheckCircle2, RotateCcw } from 'lucide-react';
 import Camera from '../../components/Camera';
@@ -411,15 +412,7 @@ export default function WordPracticeSession() {
 
           <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', flexShrink: 0 }} />
 
-          <div>
-            <p style={{ margin: '0 0 8px', fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: '0.16em' }}>Word Details</p>
-            <div style={{ borderRadius: 18, overflow: 'hidden', background: 'rgba(255,255,255,0.95)', border: '2px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 170, flexShrink: 0, boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 72, fontWeight: 900, color: '#0ea5e9', lineHeight: 1 }}>{currentWord.label}</div>
-                <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, marginTop: 6 }}>ASL · Word</div>
-              </div>
-            </div>
-          </div>
+          <YouTubeTutorial word={currentWord.label} isLetter={false} />
 
           <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.82)', lineHeight: 1.65, margin: 0 }}>{currentWord.description}</p>
 
